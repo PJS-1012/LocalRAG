@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: localrag
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/local_ai_workspace}
+    username: ${DB_USERNAME:local_ai}
+    password: ${DB_PASSWORD:local_ai_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
