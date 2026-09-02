@@ -17,6 +17,8 @@ spring:
       chat:
         options:
           model: ${OLLAMA_CHAT_MODEL:qwen3:8b}
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:qwen3-embedding:0.6b}
       init:
         pull-model-strategy: never
 

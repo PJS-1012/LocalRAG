@@ -4,7 +4,7 @@
 
 ## 현재 단계
 
-Phase 3 — Local Ollama chat
+Phase 4 — Local text embeddings
 
 ## 기술 기준
 
@@ -15,8 +15,9 @@ Phase 3 — Local Ollama chat
 - pgvector 0.8.6
 - Spring AI 1.1.8
 - Ollama + Qwen3 8B
+- Qwen3 Embedding 0.6B
 
-현재 Chat API는 로컬 LLM 연결만 검증합니다. Workspace 인덱싱과 RAG 검색은 이후 Phase에서 추가합니다.
+현재 Embedding API는 텍스트를 1024차원 Vector로 변환합니다. Vector 저장과 검색은 이후 Phase에서 추가합니다.
 
 ## Database
 
@@ -55,6 +56,19 @@ Invoke-RestMethod `
 ```
 
 기본 모델은 `qwen3:8b`이며 `OLLAMA_CHAT_MODEL` 환경 변수로 변경할 수 있습니다. 애플리케이션은 모델을 자동으로 내려받지 않습니다.
+
+Embedding API:
+
+```powershell
+$body = @{ text = "예약 생성 로직" } | ConvertTo-Json
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:18080/api/embeddings `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+기본 Embedding 모델은 `qwen3-embedding:0.6b`이며 실제 출력은 1024차원입니다. API는 확인용으로 앞 8개 값만 반환합니다.
 
 ## 테스트
 
