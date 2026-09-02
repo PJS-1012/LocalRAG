@@ -4,7 +4,7 @@
 
 ## 현재 단계
 
-Phase 2 — PostgreSQL + pgvector
+Phase 3 — Local Ollama chat
 
 ## 기술 기준
 
@@ -13,8 +13,10 @@ Phase 2 — PostgreSQL + pgvector
 - Gradle 8.14.3 Wrapper
 - PostgreSQL 17
 - pgvector 0.8.6
+- Spring AI 1.1.8
+- Ollama + Qwen3 8B
 
-Spring AI와 Ollama 연동은 각 Phase에서 개념과 역할을 확인한 뒤 필요한 의존성만 추가합니다.
+현재 Chat API는 로컬 LLM 연결만 검증합니다. Workspace 인덱싱과 RAG 검색은 이후 Phase에서 추가합니다.
 
 ## Database
 
@@ -40,6 +42,19 @@ Health API:
 Invoke-RestMethod http://localhost:18080/api/health
 Invoke-RestMethod http://localhost:18080/actuator/health
 ```
+
+Chat API:
+
+```powershell
+$body = @{ message = "Java 17의 장점을 한 문장으로 설명해줘." } | ConvertTo-Json
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:18080/api/chat `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+기본 모델은 `qwen3:8b`이며 `OLLAMA_CHAT_MODEL` 환경 변수로 변경할 수 있습니다. 애플리케이션은 모델을 자동으로 내려받지 않습니다.
 
 ## 테스트
 
