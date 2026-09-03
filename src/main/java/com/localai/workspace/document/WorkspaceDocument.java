@@ -7,6 +7,7 @@ public record WorkspaceDocument(
         String projectId,
         String fileName,
         String filePath,
+        String relativePath,
         String extension,
         long size,
         Instant modifiedAt,

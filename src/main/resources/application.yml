@@ -31,6 +31,10 @@ management:
 localrag:
   workspace:
     root-path: ${LOCALRAG_WORKSPACE_ROOT:C:/workspace}
+  chunking:
+    text-max-characters: 2000
+    source-max-characters: 2400
+    overlap-characters: 200
   scan:
     max-file-size: 5MB
     include-extensions:

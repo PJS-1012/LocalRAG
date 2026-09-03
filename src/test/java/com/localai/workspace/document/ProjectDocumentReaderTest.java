@@ -63,6 +63,7 @@ class ProjectDocumentReaderTest {
         assertThat(result.document().projectName()).isEqualTo("sample-project");
         assertThat(result.document().fileName()).isEqualTo("README.md");
         assertThat(result.document().filePath()).isEqualTo(readme.toRealPath().toString());
+        assertThat(result.document().relativePath()).isEqualTo("README.md");
         assertThat(result.document().extension()).isEqualTo("md");
         assertThat(result.document().size()).isEqualTo(Files.size(readme));
         assertThat(result.document().modifiedAt()).isNotNull();

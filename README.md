@@ -4,9 +4,9 @@
 
 ## 현재 단계
 
-Phase 5 - Workspace ingestion foundation
+Phase 6 - Chunking foundation
 
-Current: Phase 5 complete - ready for Phase 6 Chunking design
+Current: Phase 6 Step 1 - character-based structural chunking
 
 ## Workspace discovery and file scan
 
@@ -76,6 +76,17 @@ Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/scan
 
 The Workspace summary preserves each Project's type, detection hints, counts, oversized-file details, failure reason,
 and elapsed time. A failed Project does not stop later Project scans.
+
+## Chunk preview
+
+Create in-memory Chunks for one Project without embedding or persistence:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  "http://localhost:18080/api/workspaces/projects/chunks/preview?projectId=Local_Ai_Work"
+```
+
+Text and Markdown use a 2,000-character maximum, source code uses 2,400 characters, and both use 200 characters of overlap. Structural boundaries are preferred when possible.
 
 ## 기술 기준
 

@@ -110,6 +110,7 @@ public class ProjectDocumentReader {
                     project.projectId(),
                     realFile.getFileName().toString(),
                     realFile.toString(),
+                    projectRoot.relativize(candidate).toString().replace('\\', '/'),
                     scanPolicy.extension(realFile),
                     bytes.length,
                     attributes.lastModifiedTime().toInstant(),
