@@ -69,6 +69,7 @@ public class WorkspaceMetadataScanService {
     ) {
         return new WorkspaceProjectScanResult(
                 project.name(),
+                project.projectId(),
                 project.projectType(),
                 project.detectedFramework(),
                 project.gitRepository(),
@@ -95,6 +96,7 @@ public class WorkspaceMetadataScanService {
                 + (message == null || message.isBlank() ? "" : ": " + message);
         return new WorkspaceProjectScanResult(
                 project.name(),
+                project.projectId(),
                 project.projectType(),
                 project.detectedFramework(),
                 project.gitRepository(),

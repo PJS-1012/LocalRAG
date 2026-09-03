@@ -195,6 +195,7 @@ public class ProjectFileScanner {
 
             ProjectScanResult summary = new ProjectScanResult(
                     project.name(),
+                    project.projectId(),
                     project.rootPath().toString(),
                     project.projectType(),
                     total,

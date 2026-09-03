@@ -80,6 +80,9 @@ class ProjectDiscoveryServiceTest {
         assertThat(result.projects())
                 .extracting(DetectedProject::name)
                 .containsExactly("backend", "frontend", "direct-unity");
+        assertThat(result.projects())
+                .extracting(DetectedProject::projectId)
+                .containsExactly("container/backend", "container/frontend", "direct-unity");
         assertThat(result.containers())
                 .extracting(DetectedContainer::name)
                 .containsExactly("container");
@@ -110,5 +113,27 @@ class ProjectDiscoveryServiceTest {
                     assertThat(project.name()).isEqualTo("wrapper");
                     assertThat(project.projectType()).isEqualTo(ProjectType.UNKNOWN);
                 });
+    }
+
+    @Test
+    void resolvesNestedProjectOnlyBySafeWorkspaceRelativeIdentifier() throws IOException {
+        Path container = Files.createDirectory(tempDirectory.resolve("container"));
+        Path nested = Files.createDirectory(container.resolve("backend"));
+        Files.writeString(nested.resolve("package.json"), "{}");
+
+        ProjectDiscoveryService service = new ProjectDiscoveryService(
+                new WorkspaceProperties(tempDirectory),
+                new ProjectTypeDetector()
+        );
+
+        assertThat(service.findProject(tempDirectory, "container/backend"))
+                .get()
+                .extracting(DetectedProject::projectId)
+                .isEqualTo("container/backend");
+        assertThat(service.findProject(tempDirectory, "container\\backend")).isPresent();
+        assertThat(service.findProject(tempDirectory, "backend")).isEmpty();
+        assertThat(service.findProject(tempDirectory, "container")).isEmpty();
+        assertThat(service.findProject(tempDirectory, "../outside")).isEmpty();
+        assertThat(service.findProject(tempDirectory, "container/../backend")).isEmpty();
     }
 }

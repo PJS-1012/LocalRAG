@@ -105,7 +105,7 @@ class ProjectFileScannerTest {
                 new WorkspaceScanPolicy(scanProperties)
         );
 
-        ProjectScanResult result = scanner.scan("game");
+        ProjectScanResult result = scanner.scan("container/game");
 
         assertThat(result.rootPath()).isEqualTo(project.toAbsolutePath().normalize().toString());
         assertThat(result.projectType()).isEqualTo(com.localai.workspace.discovery.ProjectType.UNITY);

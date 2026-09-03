@@ -4,9 +4,9 @@
 
 ## 현재 단계
 
-Phase 4 — Local text embeddings
+Phase 5 - Workspace ingestion foundation
 
-Current: Phase 5 Step 9 - Depth-1 Project root discovery
+Current: Phase 5 complete - ready for Phase 6 Chunking design
 
 ## Workspace discovery and file scan
 
@@ -15,6 +15,9 @@ A direct child with clear framework markers is a Project root. When a direct chi
 only its immediate child directories. If marked Projects are found there, the parent is reported as a Container and
 only those child Project roots are returned for scanning. Discovery does not recurse further, and a Git repository
 alone does not imply a framework.
+Each Project exposes a portable `projectId` relative to the Workspace root, using `/` separators. Canonical
+single-Project APIs accept this ID as a query parameter.
+
 
 List Projects:
 
@@ -31,7 +34,7 @@ Invoke-RestMethod http://localhost:18080/api/workspaces/discovery
 Scan Project file metadata:
 
 ```powershell
-Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/projects/Local_Ai_Work/scan
+Invoke-RestMethod -Method Post "http://localhost:18080/api/workspaces/projects/scan?projectId=Room_Reservation%2FRoomReservation"
 ```
 
 The scan does not read or embed file content yet. It checks paths, names, extensions, and sizes, then reports:
@@ -49,7 +52,7 @@ Read exactly one supported UTF-8 text file:
 
 ```powershell
 Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/Local_Ai_Work/documents/read?filePath=README.md"
+  "http://localhost:18080/api/workspaces/projects/documents/read?projectId=Room_Reservation%2FRoomReservation&filePath=README.md"
 ```
 
 The reader reapplies the scan policy before opening the file, enforces the Project boundary after resolving links,
@@ -59,13 +62,13 @@ Read every allowed text file from one Project:
 
 ```powershell
 Invoke-RestMethod -Method Post `
-  http://localhost:18080/api/workspaces/projects/Local_Ai_Work/documents/read-all
+  "http://localhost:18080/api/workspaces/projects/documents/read-all?projectId=Toy_Sports_Day%2Ftoy_sports_day"
 ```
 
 The result reports success, failure, and skip counts; per-file paths, statuses, and reasons; total text bytes;
 and elapsed milliseconds. Reading is sequential and remains limited to the selected Project.
 
-Scan metadata for every direct-child Project without reading content:
+Scan metadata for every discovered Project root without reading content:
 
 ```powershell
 Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/scan

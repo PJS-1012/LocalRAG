@@ -7,6 +7,7 @@ import java.util.Map;
 
 public record ProjectScanResult(
         String project,
+        String projectId,
         String rootPath,
         ProjectType projectType,
         long totalDetectedFiles,

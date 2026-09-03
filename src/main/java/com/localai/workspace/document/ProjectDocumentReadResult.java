@@ -4,6 +4,7 @@ import java.util.List;
 
 public record ProjectDocumentReadResult(
         String projectName,
+        String projectId,
         long totalFiles,
         long successCount,
         long failedCount,

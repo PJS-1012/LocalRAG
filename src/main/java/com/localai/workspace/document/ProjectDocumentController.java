@@ -16,6 +16,14 @@ public class ProjectDocumentController {
         this.documentReader = documentReader;
     }
 
+    @PostMapping("/documents/read")
+    public DocumentReadResult readById(
+            @RequestParam String projectId,
+            @RequestParam String filePath
+    ) {
+        return documentReader.read(projectId, filePath);
+    }
+
     @PostMapping("/{projectName}/documents/read")
     public DocumentReadResult read(
             @PathVariable String projectName,

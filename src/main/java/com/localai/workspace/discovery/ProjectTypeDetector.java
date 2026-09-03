@@ -73,6 +73,7 @@ public class ProjectTypeDetector {
 
         return new DetectedProject(
                 projectRoot.getFileName().toString(),
+                projectRoot.getFileName().toString(),
                 projectRoot.toAbsolutePath().normalize(),
                 type,
                 framework,

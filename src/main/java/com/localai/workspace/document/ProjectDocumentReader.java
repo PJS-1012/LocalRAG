@@ -107,6 +107,7 @@ public class ProjectDocumentReader {
 
             return DocumentReadResult.success(new WorkspaceDocument(
                     project.name(),
+                    project.projectId(),
                     realFile.getFileName().toString(),
                     realFile.toString(),
                     scanPolicy.extension(realFile),

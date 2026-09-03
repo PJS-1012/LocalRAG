@@ -100,4 +100,18 @@ class ProjectDocumentReaderTest {
         assertThat(result.document()).isNull();
         assertThat(result.reason()).contains("UTF-8 file read failed");
     }
+
+    @Test
+    void rejectsSymbolicLinkThatResolvesOutsideProject() throws IOException {
+        Path outside = workspaceRoot.resolve("outside-target.md");
+        Files.writeString(outside, "outside");
+        Path link = projectRoot.resolve("linked.md");
+        Files.createSymbolicLink(link, outside);
+
+        DocumentReadResult result = reader.read("sample-project", "linked.md");
+
+        assertThat(result.status()).isEqualTo(DocumentReadStatus.READ_FAILED);
+        assertThat(result.document()).isNull();
+        assertThat(result.reason()).contains("outside the selected project");
+    }
 }

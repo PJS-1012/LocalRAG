@@ -5,6 +5,7 @@ import java.util.List;
 
 public record DetectedProject(
         String name,
+        String projectId,
         Path rootPath,
         ProjectType projectType,
         String detectedFramework,

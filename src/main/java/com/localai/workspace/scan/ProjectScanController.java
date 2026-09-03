@@ -3,6 +3,7 @@ package com.localai.workspace.scan;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -13,6 +14,11 @@ public class ProjectScanController {
 
     public ProjectScanController(ProjectFileScanner projectFileScanner) {
         this.projectFileScanner = projectFileScanner;
+    }
+
+    @PostMapping("/scan")
+    public ProjectScanResult scanById(@RequestParam String projectId) {
+        return projectFileScanner.scan(projectId);
     }
 
     @PostMapping("/{projectName}/scan")

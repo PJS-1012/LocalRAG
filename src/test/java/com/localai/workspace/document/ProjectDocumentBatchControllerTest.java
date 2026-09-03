@@ -26,7 +26,7 @@ class ProjectDocumentBatchControllerTest {
     @Test
     void returnsProjectReadSummary() throws Exception {
         when(batchReader.read("Local_Ai_Work")).thenReturn(new ProjectDocumentReadResult(
-                "Local_Ai_Work", 10, 4, 1, 5, 2048, 12, List.of(), List.of()
+                "Local_Ai_Work", "Local_Ai_Work", 10, 4, 1, 5, 2048, 12, List.of(), List.of()
         ));
 
         mockMvc.perform(post("/api/workspaces/projects/Local_Ai_Work/documents/read-all"))
@@ -37,5 +37,21 @@ class ProjectDocumentBatchControllerTest {
                 .andExpect(jsonPath("$.totalTextBytes").value(2048));
 
         verify(batchReader).read("Local_Ai_Work");
+    }
+
+    @Test
+    void readsAllFromNestedProjectByRelativeProjectId() throws Exception {
+        String projectId = "Toy_Sports_Day/toy_sports_day";
+        when(batchReader.read(projectId)).thenReturn(new ProjectDocumentReadResult(
+                "toy_sports_day", projectId, 10, 4, 0, 6, 2048, 12, List.of(), List.of()
+        ));
+
+        mockMvc.perform(post("/api/workspaces/projects/documents/read-all")
+                        .param("projectId", projectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.projectId").value(projectId))
+                .andExpect(jsonPath("$.projectName").value("toy_sports_day"));
+
+        verify(batchReader).read(projectId);
     }
 }

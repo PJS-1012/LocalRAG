@@ -4,6 +4,7 @@ import java.time.Instant;
 
 public record WorkspaceDocument(
         String projectName,
+        String projectId,
         String fileName,
         String filePath,
         String extension,

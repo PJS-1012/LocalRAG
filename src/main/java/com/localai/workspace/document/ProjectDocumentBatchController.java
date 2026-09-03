@@ -3,6 +3,7 @@ package com.localai.workspace.document;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -13,6 +14,11 @@ public class ProjectDocumentBatchController {
 
     public ProjectDocumentBatchController(ProjectDocumentBatchReader batchReader) {
         this.batchReader = batchReader;
+    }
+
+    @PostMapping("/documents/read-all")
+    public ProjectDocumentReadResult readAllById(@RequestParam String projectId) {
+        return batchReader.read(projectId);
     }
 
     @PostMapping("/{projectName}/documents/read-all")

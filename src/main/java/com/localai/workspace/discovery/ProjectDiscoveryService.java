@@ -48,14 +48,14 @@ public class ProjectDiscoveryService {
         List<DetectedProject> projects = new ArrayList<>();
         List<DetectedContainer> containers = new ArrayList<>();
         for (Path folder : childDirectories(workspaceRoot)) {
-            DetectedProject directCandidate = detector.detect(folder);
+            DetectedProject directCandidate = identify(folder, workspaceRoot);
             if (directCandidate.projectType() != ProjectType.UNKNOWN) {
                 projects.add(directCandidate);
                 continue;
             }
 
             List<DetectedProject> nestedProjects = childDirectories(folder).stream()
-                    .map(detector::detect)
+                    .map(path -> identify(path, workspaceRoot))
                     .filter(candidate -> candidate.projectType() != ProjectType.UNKNOWN)
                     .toList();
             if (nestedProjects.isEmpty()) {
@@ -78,6 +78,20 @@ public class ProjectDiscoveryService {
         );
     }
 
+    private DetectedProject identify(Path projectRoot, Path workspaceRoot) {
+        DetectedProject detected = detector.detect(projectRoot);
+        return new DetectedProject(
+                detected.name(),
+                ProjectId.from(workspaceRoot, detected.rootPath()),
+                detected.rootPath(),
+                detected.projectType(),
+                detected.detectedFramework(),
+                detected.gitRepository(),
+                detected.enabled(),
+                detected.detectionHints()
+        );
+    }
+
     private List<Path> childDirectories(Path root) {
         try (Stream<Path> children = Files.list(root)) {
             return children
@@ -89,9 +103,13 @@ public class ProjectDiscoveryService {
         }
     }
 
-    public Optional<DetectedProject> findProject(Path workspaceRoot, String projectName) {
+    public Optional<DetectedProject> findProject(Path workspaceRoot, String projectId) {
+        Optional<Path> requestedRoot = ProjectId.resolve(workspaceRoot, projectId);
+        if (requestedRoot.isEmpty()) {
+            return Optional.empty();
+        }
         return discoverProjects(workspaceRoot).stream()
-                .filter(candidate -> candidate.name().equalsIgnoreCase(projectName))
+                .filter(candidate -> candidate.rootPath().equals(requestedRoot.get()))
                 .findFirst();
     }
 }

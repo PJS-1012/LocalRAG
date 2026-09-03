@@ -28,7 +28,7 @@ class WorkspaceControllerTest {
     void returnsProjectsAndContainers() throws Exception {
         Path workspace = Path.of("C:/workspace");
         DetectedProject nested = new DetectedProject(
-                "nested", workspace.resolve("container/nested"), ProjectType.NODE,
+                "nested", "container/nested", workspace.resolve("container/nested"), ProjectType.NODE,
                 "NODE", false, true, List.of("package.json")
         );
         when(discoveryService.discoverWorkspace()).thenReturn(new WorkspaceDiscoveryResult(

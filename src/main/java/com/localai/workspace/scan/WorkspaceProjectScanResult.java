@@ -6,6 +6,7 @@ import java.util.List;
 
 public record WorkspaceProjectScanResult(
         String projectName,
+        String projectId,
         ProjectType projectType,
         String detectedFramework,
         boolean gitRepository,

@@ -64,6 +64,7 @@ class WorkspaceMetadataScanServiceTest {
     ) {
         return new DetectedProject(
                 name,
+                name,
                 workspaceRoot.resolve(name),
                 type,
                 framework,
@@ -75,6 +76,7 @@ class WorkspaceMetadataScanServiceTest {
 
     private ProjectScanResult scanResult() {
         return new ProjectScanResult(
+                "healthy",
                 "healthy",
                 workspaceRoot.resolve("healthy").toString(),
                 ProjectType.JAVA,

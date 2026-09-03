@@ -68,6 +68,7 @@ public class ProjectDocumentBatchReader {
 
         return new ProjectDocumentReadResult(
                 scanPlan.project().name(),
+                scanPlan.project().projectId(),
                 scanPlan.summary().totalDetectedFiles(),
                 successCount,
                 failedCount,

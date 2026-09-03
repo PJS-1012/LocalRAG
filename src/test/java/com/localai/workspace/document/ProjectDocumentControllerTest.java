@@ -27,6 +27,7 @@ class ProjectDocumentControllerTest {
     void readsExactlyOneRequestedFile() throws Exception {
         WorkspaceDocument document = new WorkspaceDocument(
                 "Local_Ai_Work",
+                "Local_Ai_Work",
                 "README.md",
                 "C:\\workspace\\Local_Ai_Work\\README.md",
                 "md",
@@ -46,5 +47,31 @@ class ProjectDocumentControllerTest {
                 .andExpect(jsonPath("$.document.content").value("# LocalRAG"));
 
         verify(documentReader).read("Local_Ai_Work", "README.md");
+    }
+
+    @Test
+    void readsNestedProjectByRelativeProjectId() throws Exception {
+        String projectId = "Room_Reservation/RoomReservation";
+        WorkspaceDocument document = new WorkspaceDocument(
+                "RoomReservation",
+                projectId,
+                "README.md",
+                "C:\\workspace\\Room_Reservation\\RoomReservation\\README.md",
+                "md",
+                42,
+                Instant.parse("2026-09-03T00:00:00Z"),
+                "# Room Reservation"
+        );
+        when(documentReader.read(projectId, "README.md"))
+                .thenReturn(DocumentReadResult.success(document));
+
+        mockMvc.perform(post("/api/workspaces/projects/documents/read")
+                        .param("projectId", projectId)
+                        .param("filePath", "README.md"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.document.projectId").value(projectId))
+                .andExpect(jsonPath("$.document.projectName").value("RoomReservation"));
+
+        verify(documentReader).read(projectId, "README.md");
     }
 }
