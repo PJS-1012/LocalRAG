@@ -27,3 +27,125 @@ management:
     web:
       exposure:
         include: health,info
+
+localrag:
+  workspace:
+    root-path: ${LOCALRAG_WORKSPACE_ROOT:C:/workspace}
+  scan:
+    max-file-size: 5MB
+    include-extensions:
+      - java
+      - kt
+      - cs
+      - js
+      - jsx
+      - ts
+      - tsx
+      - py
+      - c
+      - cpp
+      - h
+      - hpp
+      - sql
+      - md
+      - txt
+      - yml
+      - yaml
+      - json
+      - properties
+      - xml
+      - csv
+      - log
+      - html
+      - css
+      - gradle
+      - kts
+      - ps1
+      - sh
+    include-file-names:
+      - Dockerfile
+      - README
+      - LICENSE
+    common-exclude-directories:
+      - .git
+      - .github
+      - .idea
+      - .vscode
+      - .gradle
+      - .mvn
+      - target
+      - build
+      - out
+      - dist
+      - node_modules
+      - bin
+      - obj
+      - coverage
+      - .cache
+      - tmp
+      - temp
+      - venv
+      - .venv
+      - __pycache__
+      - .next
+      - .nuxt
+      - vendor
+    common-exclude-paths:
+      - logs/archive
+    unity-exclude-directories:
+      - Library
+      - Temp
+      - Logs
+      - UserSettings
+      - MemoryCaptures
+      - Recordings
+      - Build
+      - Builds
+    exclude-file-patterns:
+      - "*.class"
+      - "*.jar"
+      - "*.war"
+      - "*.exe"
+      - "*.dll"
+      - "*.so"
+      - "*.dylib"
+      - "*.zip"
+      - "*.rar"
+      - "*.7z"
+      - "*.tar"
+      - "*.gz"
+      - "*.png"
+      - "*.jpg"
+      - "*.jpeg"
+      - "*.gif"
+      - "*.webp"
+      - "*.ico"
+      - "*.mp3"
+      - "*.wav"
+      - "*.flac"
+      - "*.mp4"
+      - "*.avi"
+      - "*.mov"
+      - "*.mkv"
+      - "*.ttf"
+      - "*.otf"
+      - "*.woff"
+      - "*.woff2"
+      - package-lock.json
+      - yarn.lock
+      - pnpm-lock.yaml
+      - "*.asset"
+    sensitive-file-patterns:
+      - ".env"
+      - ".env.*"
+      - "application-prod.*"
+      - "*.pem"
+      - "*.key"
+      - "*.p12"
+      - "*.pfx"
+      - "*credential*"
+      - "*secret*"
+      - "id_rsa"
+      - "id_ed25519"
+      - "*api-key*"
+      - "*apikey*"

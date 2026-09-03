@@ -6,6 +6,37 @@
 
 Phase 4 — Local text embeddings
 
+Current: Phase 5 - Workspace project discovery and file scan policy
+
+## Workspace discovery and file scan
+
+The default Workspace root is `C:/workspace`. Override it with `LOCALRAG_WORKSPACE_ROOT`.
+Only direct child directories are Project candidates. Multiple structural hints classify each candidate as
+Java/Spring Boot, Unity, Node.js, .NET, Python, or UNKNOWN. A Git repository alone does not imply a framework.
+
+List Projects:
+
+```powershell
+Invoke-RestMethod http://localhost:18080/api/workspaces/projects
+```
+
+Scan Project file metadata:
+
+```powershell
+Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/projects/Local_Ai_Work/scan
+```
+
+The scan does not read or embed file content yet. It checks paths, names, extensions, and sizes, then reports:
+
+- `SUPPORTED`
+- `SKIPPED_EXTENSION`
+- `SKIPPED_EXCLUDED_PATH`
+- `SKIPPED_SENSITIVE`
+- `SKIPPED_TOO_LARGE`
+- `METADATA_FAILED`
+
+The default file-size limit is 5MB. Unity Projects additionally exclude generated directories such as `Library`, `Temp`, `Logs`, and `UserSettings`.
+
 ## 기술 기준
 
 - Java 17
