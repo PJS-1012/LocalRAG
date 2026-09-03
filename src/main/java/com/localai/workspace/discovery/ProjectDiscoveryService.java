@@ -8,6 +8,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 @Service
@@ -22,7 +23,15 @@ public class ProjectDiscoveryService {
     }
 
     public List<DetectedProject> discoverProjects() {
-        Path workspaceRoot = properties.rootPath().toAbsolutePath().normalize();
+        return discoverProjects(defaultWorkspaceRoot());
+    }
+
+    public Path defaultWorkspaceRoot() {
+        return properties.rootPath().toAbsolutePath().normalize();
+    }
+
+    public List<DetectedProject> discoverProjects(Path workspacePath) {
+        Path workspaceRoot = workspacePath.toAbsolutePath().normalize();
         if (!Files.isDirectory(workspaceRoot, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceAccessException("Workspace root is not an accessible directory: " + workspaceRoot);
         }
@@ -36,5 +45,11 @@ public class ProjectDiscoveryService {
         } catch (IOException exception) {
             throw new WorkspaceAccessException("Failed to read workspace root: " + workspaceRoot, exception);
         }
+    }
+
+    public Optional<DetectedProject> findProject(Path workspaceRoot, String projectName) {
+        return discoverProjects(workspaceRoot).stream()
+                .filter(candidate -> candidate.name().equalsIgnoreCase(projectName))
+                .findFirst();
     }
 }

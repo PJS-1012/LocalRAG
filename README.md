@@ -6,7 +6,7 @@
 
 Phase 4 — Local text embeddings
 
-Current: Phase 5 Step 6 - Safe single text file read
+Current: Phase 5 Step 7 - Sequential Project text file read
 
 ## Workspace discovery and file scan
 
@@ -46,6 +46,16 @@ Invoke-RestMethod -Method Post `
 
 The reader reapplies the scan policy before opening the file, enforces the Project boundary after resolving links,
 and returns `READ_FAILED` instead of aborting other work when UTF-8 decoding or file access fails.
+
+Read every allowed text file from one Project:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  http://localhost:18080/api/workspaces/projects/Local_Ai_Work/documents/read-all
+```
+
+The result reports success, failure, and skip counts; per-file paths, statuses, and reasons; total text bytes;
+and elapsed milliseconds. Reading is sequential and remains limited to the selected Project.
 
 ## 기술 기준
 

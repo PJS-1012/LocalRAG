@@ -30,14 +30,19 @@ public class ProjectDocumentReader {
     }
 
     public DocumentReadResult read(String projectName, String relativeFilePath) {
-        Optional<DetectedProject> detectedProject = discoveryService.discoverProjects().stream()
-                .filter(candidate -> candidate.name().equalsIgnoreCase(projectName))
-                .findFirst();
+        return read(discoveryService.defaultWorkspaceRoot(), projectName, relativeFilePath);
+    }
+
+    public DocumentReadResult read(Path workspaceRoot, String projectName, String relativeFilePath) {
+        Optional<DetectedProject> detectedProject = discoveryService.findProject(workspaceRoot, projectName);
         if (detectedProject.isEmpty()) {
             return failed("Direct child project was not found: " + projectName);
         }
 
-        DetectedProject project = detectedProject.get();
+        return read(detectedProject.get(), relativeFilePath);
+    }
+
+    public DocumentReadResult read(DetectedProject project, String relativeFilePath) {
         Path requestedPath;
         try {
             requestedPath = Path.of(relativeFilePath);

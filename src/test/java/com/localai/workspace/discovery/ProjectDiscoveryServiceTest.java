@@ -33,4 +33,21 @@ class ProjectDiscoveryServiceTest {
                 .extracting(DetectedProject::name)
                 .containsExactly("direct-project");
     }
+
+    @Test
+    void discoversFromSuppliedWorkspaceInsteadOfConfiguredDefault() throws IOException {
+        Path configuredDefault = Files.createDirectory(tempDirectory.resolve("configured-default"));
+        Path suppliedWorkspace = Files.createDirectory(tempDirectory.resolve("supplied-workspace"));
+        Files.createDirectory(suppliedWorkspace.resolve("dynamic-project"));
+        ProjectDiscoveryService service = new ProjectDiscoveryService(
+                new WorkspaceProperties(configuredDefault),
+                new ProjectTypeDetector()
+        );
+
+        List<DetectedProject> projects = service.discoverProjects(suppliedWorkspace);
+
+        assertThat(projects)
+                .extracting(DetectedProject::name)
+                .containsExactly("dynamic-project");
+    }
 }
