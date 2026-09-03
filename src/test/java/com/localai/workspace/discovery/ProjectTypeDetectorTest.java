@@ -57,4 +57,17 @@ class ProjectTypeDetectorTest {
         assertThat(detected.detectedFramework()).isEqualTo("UNKNOWN");
         assertThat(detected.gitRepository()).isTrue();
     }
+
+    @Test
+    void detectsJavaProjectFromSettingsAndSourceMarkers() throws IOException {
+        Path project = Files.createDirectory(tempDirectory.resolve("settings-java"));
+        Files.createDirectories(project.resolve("src/main/java"));
+        Files.writeString(project.resolve("settings.gradle"), "rootProject.name = 'settings-java'");
+
+        DetectedProject detected = detector.detect(project);
+
+        assertThat(detected.projectType()).isEqualTo(ProjectType.JAVA);
+        assertThat(detected.detectedFramework()).isEqualTo("JAVA");
+        assertThat(detected.detectionHints()).contains("settings.gradle", "src/main/java");
+    }
 }

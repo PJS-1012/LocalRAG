@@ -50,4 +50,65 @@ class ProjectDiscoveryServiceTest {
                 .extracting(DetectedProject::name)
                 .containsExactly("dynamic-project");
     }
+    @Test
+    void discoversOneLevelNestedProjectsAndKeepsContainerSeparate() throws IOException {
+        Path container = Files.createDirectory(tempDirectory.resolve("container"));
+        Files.createDirectory(container.resolve(".git"));
+
+        Path backend = Files.createDirectory(container.resolve("backend"));
+        Files.createDirectories(backend.resolve("src/main/java"));
+        Files.writeString(backend.resolve("build.gradle"), "plugins { id 'java' }");
+
+        Path frontend = Files.createDirectory(container.resolve("frontend"));
+        Files.writeString(frontend.resolve("package.json"), "{}");
+
+        Path directUnity = Files.createDirectory(tempDirectory.resolve("direct-unity"));
+        Files.createDirectory(directUnity.resolve("Assets"));
+        Files.createDirectory(directUnity.resolve("ProjectSettings"));
+        Files.createDirectories(directUnity.resolve("Packages"));
+        Files.writeString(directUnity.resolve("Packages/manifest.json"), "{}");
+        Files.createDirectories(directUnity.resolve("Assets/nested"));
+        Files.writeString(directUnity.resolve("Assets/nested/package.json"), "{}");
+
+        ProjectDiscoveryService service = new ProjectDiscoveryService(
+                new WorkspaceProperties(tempDirectory),
+                new ProjectTypeDetector()
+        );
+
+        WorkspaceDiscoveryResult result = service.discoverWorkspace();
+
+        assertThat(result.projects())
+                .extracting(DetectedProject::name)
+                .containsExactly("backend", "frontend", "direct-unity");
+        assertThat(result.containers())
+                .extracting(DetectedContainer::name)
+                .containsExactly("container");
+        assertThat(result.containers().get(0).gitRepository()).isTrue();
+        assertThat(result.containers().get(0).projects())
+                .extracting(DetectedProject::name)
+                .containsExactly("backend", "frontend");
+    }
+
+    @Test
+    void doesNotSearchPastOneAdditionalLevel() throws IOException {
+        Path wrapper = Files.createDirectory(tempDirectory.resolve("wrapper"));
+        Path groupingFolder = Files.createDirectory(wrapper.resolve("grouping"));
+        Path tooDeep = Files.createDirectory(groupingFolder.resolve("too-deep"));
+        Files.writeString(tooDeep.resolve("package.json"), "{}");
+
+        ProjectDiscoveryService service = new ProjectDiscoveryService(
+                new WorkspaceProperties(tempDirectory),
+                new ProjectTypeDetector()
+        );
+
+        WorkspaceDiscoveryResult result = service.discoverWorkspace();
+
+        assertThat(result.containers()).isEmpty();
+        assertThat(result.projects())
+                .singleElement()
+                .satisfies(project -> {
+                    assertThat(project.name()).isEqualTo("wrapper");
+                    assertThat(project.projectType()).isEqualTo(ProjectType.UNKNOWN);
+                });
+    }
 }

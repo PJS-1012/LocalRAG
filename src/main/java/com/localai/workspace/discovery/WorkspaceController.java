@@ -20,4 +20,9 @@ public class WorkspaceController {
     public List<DetectedProject> projects() {
         return projectDiscoveryService.discoverProjects();
     }
+
+    @GetMapping("/discovery")
+    public WorkspaceDiscoveryResult discovery() {
+        return projectDiscoveryService.discoverWorkspace();
+    }
 }

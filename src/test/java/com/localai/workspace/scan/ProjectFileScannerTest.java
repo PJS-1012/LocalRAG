@@ -73,4 +73,44 @@ class ProjectFileScannerTest {
                 .extracting(SkippedFile::file)
                 .containsExactly("large.log");
     }
+
+    @Test
+    void scansNestedUnityRootWithUnityExclusions() throws IOException {
+        Path container = Files.createDirectory(workspaceRoot.resolve("container"));
+        Path project = Files.createDirectory(container.resolve("game"));
+        Files.createDirectory(project.resolve("Assets"));
+        Files.createDirectory(project.resolve("ProjectSettings"));
+        Files.createDirectories(project.resolve("Packages"));
+        Files.writeString(project.resolve("Packages/manifest.json"), "{}");
+        Files.writeString(project.resolve("Assets/Player.cs"), "class Player {}");
+        Files.createDirectories(project.resolve("Library/Bee"));
+        Files.writeString(project.resolve("Library/Bee/oversized.json"), "this generated file exceeds limit");
+
+        WorkspaceScanProperties scanProperties = new WorkspaceScanProperties(
+                DataSize.ofBytes(20),
+                Set.of("cs", "json"),
+                Set.of(),
+                Set.of(".git", "build", "node_modules"),
+                Set.of(),
+                Set.of("library"),
+                List.of(),
+                List.of()
+        );
+        ProjectDiscoveryService discoveryService = new ProjectDiscoveryService(
+                new WorkspaceProperties(workspaceRoot),
+                new ProjectTypeDetector()
+        );
+        ProjectFileScanner scanner = new ProjectFileScanner(
+                discoveryService,
+                new WorkspaceScanPolicy(scanProperties)
+        );
+
+        ProjectScanResult result = scanner.scan("game");
+
+        assertThat(result.rootPath()).isEqualTo(project.toAbsolutePath().normalize().toString());
+        assertThat(result.projectType()).isEqualTo(com.localai.workspace.discovery.ProjectType.UNITY);
+        assertThat(result.excludedDirectories()).contains("Library");
+        assertThat(result.skippedTooLargeFiles()).isZero();
+        assertThat(result.tooLargeFiles()).isEmpty();
+    }
 }

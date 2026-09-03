@@ -35,6 +35,10 @@ public class ProjectFileScanner {
         return plan(workspaceRoot, projectName).summary();
     }
 
+    public ProjectScanResult scan(DetectedProject project) {
+        return plan(project).summary();
+    }
+
     public ProjectScanPlan plan(String projectName) {
         return plan(discoveryService.defaultWorkspaceRoot(), projectName);
     }
@@ -42,8 +46,11 @@ public class ProjectFileScanner {
     public ProjectScanPlan plan(Path workspaceRoot, String projectName) {
         DetectedProject project = discoveryService.findProject(workspaceRoot, projectName)
                 .orElseThrow(() -> new WorkspaceAccessException(
-                        "Direct child project was not found in the registered workspace: " + projectName));
+                        "Project was not found in the registered workspace: " + projectName));
+        return plan(project);
+    }
 
+    public ProjectScanPlan plan(DetectedProject project) {
         ScanAccumulator accumulator = new ScanAccumulator(project);
         try {
             Files.walkFileTree(project.rootPath(), accumulator);

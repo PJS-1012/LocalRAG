@@ -36,7 +36,7 @@ public class ProjectDocumentReader {
     public DocumentReadResult read(Path workspaceRoot, String projectName, String relativeFilePath) {
         Optional<DetectedProject> detectedProject = discoveryService.findProject(workspaceRoot, projectName);
         if (detectedProject.isEmpty()) {
-            return failed("Direct child project was not found: " + projectName);
+            return failed("Project was not found: " + projectName);
         }
 
         return read(detectedProject.get(), relativeFilePath);

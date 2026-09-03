@@ -6,18 +6,26 @@
 
 Phase 4 — Local text embeddings
 
-Current: Phase 5 Step 8 - Sequential Workspace metadata scan
+Current: Phase 5 Step 9 - Depth-1 Project root discovery
 
 ## Workspace discovery and file scan
 
 The default Workspace root is `C:/workspace`. Override it with `LOCALRAG_WORKSPACE_ROOT`.
-Only direct child directories are Project candidates. Multiple structural hints classify each candidate as
-Java/Spring Boot, Unity, Node.js, .NET, Python, or UNKNOWN. A Git repository alone does not imply a framework.
+A direct child with clear framework markers is a Project root. When a direct child is UNKNOWN, discovery checks
+only its immediate child directories. If marked Projects are found there, the parent is reported as a Container and
+only those child Project roots are returned for scanning. Discovery does not recurse further, and a Git repository
+alone does not imply a framework.
 
 List Projects:
 
 ```powershell
 Invoke-RestMethod http://localhost:18080/api/workspaces/projects
+```
+
+Inspect Projects and Containers:
+
+```powershell
+Invoke-RestMethod http://localhost:18080/api/workspaces/discovery
 ```
 
 Scan Project file metadata:

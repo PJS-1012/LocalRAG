@@ -35,7 +35,7 @@ public class WorkspaceMetadataScanService {
         for (DetectedProject project : detectedProjects) {
             long projectStartedAt = System.nanoTime();
             try {
-                ProjectScanResult scan = projectFileScanner.scan(workspaceRoot, project.name());
+                ProjectScanResult scan = projectFileScanner.scan(project);
                 projectResults.add(success(project, scan, elapsedMillis(projectStartedAt)));
             } catch (RuntimeException exception) {
                 projectResults.add(failure(project, exception, elapsedMillis(projectStartedAt)));

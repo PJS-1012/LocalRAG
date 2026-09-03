@@ -28,8 +28,8 @@ class WorkspaceMetadataScanServiceTest {
         DetectedProject healthy = project("healthy", ProjectType.JAVA, "SPRING_BOOT", true);
         DetectedProject broken = project("broken", ProjectType.UNKNOWN, "UNKNOWN", false);
         when(discoveryService.discoverProjects(workspaceRoot)).thenReturn(List.of(healthy, broken));
-        when(projectFileScanner.scan(workspaceRoot, "healthy")).thenReturn(scanResult());
-        when(projectFileScanner.scan(workspaceRoot, "broken"))
+        when(projectFileScanner.scan(healthy)).thenReturn(scanResult());
+        when(projectFileScanner.scan(broken))
                 .thenThrow(new WorkspaceAccessException("access denied"));
 
         WorkspaceScanSummary result = new WorkspaceMetadataScanService(
@@ -52,8 +52,8 @@ class WorkspaceMetadataScanServiceTest {
                     assertThat(project.projectName()).isEqualTo("broken");
                     assertThat(project.failureReason()).contains("access denied");
                 });
-        verify(projectFileScanner).scan(workspaceRoot, "healthy");
-        verify(projectFileScanner).scan(workspaceRoot, "broken");
+        verify(projectFileScanner).scan(healthy);
+        verify(projectFileScanner).scan(broken);
     }
 
     private DetectedProject project(

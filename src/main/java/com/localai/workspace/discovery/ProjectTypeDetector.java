@@ -28,10 +28,14 @@ public class ProjectTypeDetector {
         boolean gradle = fileExists(projectRoot, "build.gradle");
         boolean gradleKts = fileExists(projectRoot, "build.gradle.kts");
         boolean maven = fileExists(projectRoot, "pom.xml");
+        boolean gradleSettings = fileExists(projectRoot, "settings.gradle");
+        boolean gradleSettingsKts = fileExists(projectRoot, "settings.gradle.kts");
         boolean javaSource = directoryExists(projectRoot, "src/main/java");
         addHint(hints, gradle, "build.gradle");
         addHint(hints, gradleKts, "build.gradle.kts");
         addHint(hints, maven, "pom.xml");
+        addHint(hints, gradleSettings, "settings.gradle");
+        addHint(hints, gradleSettingsKts, "settings.gradle.kts");
         addHint(hints, javaSource, "src/main/java");
 
         boolean node = fileExists(projectRoot, "package.json");
@@ -48,7 +52,7 @@ public class ProjectTypeDetector {
         if (unityAssets && unitySettings && unityManifest) {
             type = ProjectType.UNITY;
             framework = "UNITY";
-        } else if ((gradle || gradleKts || maven) && javaSource) {
+        } else if ((gradle || gradleKts || maven || gradleSettings || gradleSettingsKts) && javaSource) {
             type = ProjectType.JAVA;
             framework = isSpringBootProject(projectRoot, gradle, gradleKts, maven)
                     ? "SPRING_BOOT"
