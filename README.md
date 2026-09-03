@@ -6,7 +6,7 @@
 
 Phase 4 — Local text embeddings
 
-Current: Phase 5 Step 7 - Sequential Project text file read
+Current: Phase 5 Step 8 - Sequential Workspace metadata scan
 
 ## Workspace discovery and file scan
 
@@ -56,6 +56,15 @@ Invoke-RestMethod -Method Post `
 
 The result reports success, failure, and skip counts; per-file paths, statuses, and reasons; total text bytes;
 and elapsed milliseconds. Reading is sequential and remains limited to the selected Project.
+
+Scan metadata for every direct-child Project without reading content:
+
+```powershell
+Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/scan
+```
+
+The Workspace summary preserves each Project's type, detection hints, counts, oversized-file details, failure reason,
+and elapsed time. A failed Project does not stop later Project scans.
 
 ## 기술 기준
 
