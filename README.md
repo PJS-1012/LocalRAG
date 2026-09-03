@@ -6,7 +6,7 @@
 
 Phase 4 — Local text embeddings
 
-Current: Phase 5 - Workspace project discovery and file scan policy
+Current: Phase 5 Step 6 - Safe single text file read
 
 ## Workspace discovery and file scan
 
@@ -36,6 +36,16 @@ The scan does not read or embed file content yet. It checks paths, names, extens
 - `METADATA_FAILED`
 
 The default file-size limit is 5MB. Unity Projects additionally exclude generated directories such as `Library`, `Temp`, `Logs`, and `UserSettings`.
+
+Read exactly one supported UTF-8 text file:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  "http://localhost:18080/api/workspaces/projects/Local_Ai_Work/documents/read?filePath=README.md"
+```
+
+The reader reapplies the scan policy before opening the file, enforces the Project boundary after resolving links,
+and returns `READ_FAILED` instead of aborting other work when UTF-8 decoding or file access fails.
 
 ## 기술 기준
 
