@@ -71,6 +71,11 @@ Across 14 Queries:
 - Average end-to-end duration across all 14 Queries: 10,345 ms
 - Zero-Source RabbitMQ control: 151 ms total and 0 ms LLM time
 
+The LLM and end-to-end averages use different populations. The 10,990 ms LLM average includes only the 13 Queries
+that invoked the model, while the 10,345 ms end-to-end average includes all 14 Queries, including the 151 ms
+zero-Source control that skipped the LLM. Therefore the end-to-end average can be lower than the LLM-only average;
+the recorded values are not a timing-order violation.
+
 Times vary with Ollama model residency, database/filesystem cache, and local machine load.
 
 ## Phase 6 conclusion

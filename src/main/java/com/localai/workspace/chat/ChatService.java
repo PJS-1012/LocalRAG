@@ -26,4 +26,13 @@ public class ChatService {
                 .call()
                 .content();
     }
+
+    public String chatWithTools(String systemMessage, String userMessage, Object... tools) {
+        return chatClient.prompt()
+                .system(systemMessage)
+                .user(userMessage)
+                .tools(tools)
+                .call()
+                .content();
+    }
 }

@@ -49,6 +49,11 @@ localrag:
   rag:
     context:
       max-characters: 8000
+  agent:
+    git:
+      max-recent-commits: 20
+      command-timeout: 5s
+      max-output-characters: 65536
   scan:
     max-file-size: 5MB
     include-extensions:
