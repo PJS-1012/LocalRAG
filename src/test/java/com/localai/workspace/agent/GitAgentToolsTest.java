@@ -28,7 +28,7 @@ class GitAgentToolsTest {
 
         assertThat(result).isEqualTo(fixture);
         assertThat(result.commits().get(0).message()).contains("git push");
-        assertThat(tools.invocations()).extracting(GitToolInvocation::toolName)
+        assertThat(tools.invocations()).extracting(AgentToolInvocation::toolName)
                 .containsExactly("getRecentCommits");
         assertThat(tools.failed()).isFalse();
     }

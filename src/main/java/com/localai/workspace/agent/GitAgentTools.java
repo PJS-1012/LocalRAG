@@ -6,11 +6,11 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import java.util.ArrayList;
 import java.util.List;
 
-final class GitAgentTools {
+final class GitAgentTools implements AgentToolTracker {
 
     private final String allowedProjectId;
     private final GitReadOnlyService gitService;
-    private final List<GitToolInvocation> invocations = new ArrayList<>();
+    private final List<AgentToolInvocation> invocations = new ArrayList<>();
     private boolean failed;
 
     GitAgentTools(String allowedProjectId, GitReadOnlyService gitService) {
@@ -70,16 +70,16 @@ final class GitAgentTools {
         return result;
     }
 
-    List<GitToolInvocation> invocations() {
+    public List<AgentToolInvocation> invocations() {
         return List.copyOf(invocations);
     }
 
-    boolean failed() {
+    public boolean failed() {
         return failed;
     }
 
     private void record(String toolName, long startedAt, GitToolStatus status) {
-        invocations.add(new GitToolInvocation(toolName, (System.nanoTime() - startedAt) / 1_000_000));
+        invocations.add(new AgentToolInvocation(toolName, (System.nanoTime() - startedAt) / 1_000_000));
         if (status != GitToolStatus.SUCCESS) {
             failed = true;
         }

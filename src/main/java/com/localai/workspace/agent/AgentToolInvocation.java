@@ -1,6 +1,6 @@
 package com.localai.workspace.agent;
 
-public record GitToolInvocation(
+public record AgentToolInvocation(
         String toolName,
         long durationMillis
 ) {

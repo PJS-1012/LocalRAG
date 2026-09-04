@@ -54,6 +54,11 @@ localrag:
       max-recent-commits: 20
       command-timeout: 5s
       max-output-characters: 65536
+    environment:
+      command-timeout: 5s
+      http-timeout: 3s
+      max-output-characters: 65536
+      max-models: 100
   scan:
     max-file-size: 5MB
     include-extensions:
