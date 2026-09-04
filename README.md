@@ -6,7 +6,7 @@
 
 Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 4 - Project vector similarity search
+Current: Phase 6 Step 4.3 - Query instruction enabled by default
 
 ## Workspace discovery and file scan
 
@@ -139,7 +139,9 @@ Invoke-RestMethod -Method Post `
 
 The response returns ranked Chunk content and citation-ready source metadata, never vectors. Search is always scoped
 by `projectId`. The current evaluation baseline is Top-K 5 and similarity threshold 0.45; these are configurable
-retrieval-tuning values rather than final quality constants.
+retrieval-tuning values rather than final quality constants. Query instruction is enabled by default through
+`localrag.search.query-instruction`. Send `"instructionEnabled": false` in the request to use the raw user Query.
+The response's `instructionEnabled` field reports the mode actually used.
 
 ## 기술 기준
 

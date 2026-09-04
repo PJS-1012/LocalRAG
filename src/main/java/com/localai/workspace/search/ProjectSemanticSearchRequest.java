@@ -4,6 +4,7 @@ public record ProjectSemanticSearchRequest(
         String projectId,
         String query,
         Integer topK,
-        Double threshold
+        Double threshold,
+        Boolean instructionEnabled
 ) {
 }

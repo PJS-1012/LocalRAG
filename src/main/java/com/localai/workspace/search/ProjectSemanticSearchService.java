@@ -39,6 +39,9 @@ public class ProjectSemanticSearchService {
                 : request.threshold();
         String projectId = request == null ? null : request.projectId();
         String query = request == null ? null : request.query();
+        boolean instructionEnabled = request == null || request.instructionEnabled() == null
+                ? searchProperties.queryInstruction().enabled()
+                : request.instructionEnabled();
 
         String validationFailure = validate(projectId, query, topK, threshold);
         if (validationFailure != null) {
@@ -47,6 +50,7 @@ public class ProjectSemanticSearchService {
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     0,
                     0,
                     0,
@@ -63,6 +67,7 @@ public class ProjectSemanticSearchService {
                         query,
                         topK,
                         threshold,
+                        instructionEnabled,
                         0,
                         0,
                         0,
@@ -77,6 +82,7 @@ public class ProjectSemanticSearchService {
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     0,
                     0,
                     0,
@@ -89,13 +95,15 @@ public class ProjectSemanticSearchService {
         long embeddingStartedAt = System.nanoTime();
         float[] queryVector;
         try {
-            queryVector = embeddingService.embedVector(query.strip());
+            queryVector = embeddingService.embedVector(
+                    queryEmbeddingInput(query, instructionEnabled));
         } catch (RuntimeException exception) {
             return failure(
                     projectId,
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     0,
                     elapsedMillis(embeddingStartedAt),
                     0,
@@ -113,6 +121,7 @@ public class ProjectSemanticSearchService {
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     dimensions,
                     embeddingDurationMillis,
                     0,
@@ -140,6 +149,7 @@ public class ProjectSemanticSearchService {
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     queryVector.length,
                     matches.size(),
                     embeddingDurationMillis,
@@ -155,6 +165,7 @@ public class ProjectSemanticSearchService {
                     query,
                     topK,
                     threshold,
+                    instructionEnabled,
                     queryVector.length,
                     embeddingDurationMillis,
                     elapsedMillis(databaseStartedAt),
@@ -163,6 +174,14 @@ public class ProjectSemanticSearchService {
                     startedAt
             );
         }
+    }
+
+    private String queryEmbeddingInput(String query, boolean instructionEnabled) {
+        String normalizedQuery = query.strip();
+        if (!instructionEnabled) {
+            return normalizedQuery;
+        }
+        return searchProperties.queryInstruction().apply(normalizedQuery);
     }
 
     private String validate(String projectId, String query, int topK, double threshold) {
@@ -203,6 +222,7 @@ public class ProjectSemanticSearchService {
             String query,
             int topK,
             double threshold,
+            boolean instructionEnabled,
             int dimensions,
             long embeddingDurationMillis,
             long databaseDurationMillis,
@@ -215,6 +235,7 @@ public class ProjectSemanticSearchService {
                 query,
                 topK,
                 threshold,
+                instructionEnabled,
                 dimensions,
                 0,
                 embeddingDurationMillis,

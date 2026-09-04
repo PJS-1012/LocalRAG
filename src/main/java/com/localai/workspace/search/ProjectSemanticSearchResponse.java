@@ -7,6 +7,7 @@ public record ProjectSemanticSearchResponse(
         String query,
         int topK,
         double threshold,
+        boolean instructionEnabled,
         int queryEmbeddingDimension,
         int resultCount,
         long queryEmbeddingDurationMillis,

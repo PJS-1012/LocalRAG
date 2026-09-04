@@ -41,6 +41,11 @@ localrag:
     default-top-k: 5
     default-threshold: 0.45
     max-top-k: 20
+    query-instruction:
+      enabled: true
+      template: |-
+        Instruct: Retrieve the most relevant source code or project documentation for the software project query.
+        Query: <USER_QUERY>
   scan:
     max-file-size: 5MB
     include-extensions:

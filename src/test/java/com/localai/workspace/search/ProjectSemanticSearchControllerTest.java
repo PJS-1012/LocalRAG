@@ -30,13 +30,15 @@ class ProjectSemanticSearchControllerTest {
                 "Local_Ai_Work",
                 "프로젝트 타입 탐지",
                 5,
-                0.50
+                0.50,
+                null
         );
         when(searchService.search(request)).thenReturn(new ProjectSemanticSearchResponse(
                 "Local_Ai_Work",
                 "프로젝트 타입 탐지",
                 5,
                 0.50,
+                true,
                 1024,
                 1,
                 40,
@@ -72,6 +74,7 @@ class ProjectSemanticSearchControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.instructionEnabled").value(true))
                 .andExpect(jsonPath("$.resultCount").value(1))
                 .andExpect(jsonPath("$.results[0].rank").value(1))
                 .andExpect(jsonPath("$.results[0].similarity").value(0.81))

@@ -14,19 +14,24 @@ import static org.mockito.Mockito.when;
 
 class ProjectSemanticSearchServiceTest {
 
+    private static final String INSTRUCTED_QUERY = """
+            Instruct: Retrieve the most relevant source code or project documentation for the software project query.
+            Query: project discovery""";
+
     @Test
     void embedsAndSearchesWithConfiguredDefaults() {
         EmbeddingService embeddingService = mock(EmbeddingService.class);
         ProjectSemanticSearchRepository repository = mock(ProjectSemanticSearchRepository.class);
         float[] vector = new float[1024];
         when(repository.count("Local_Ai_Work")).thenReturn(10L);
-        when(embeddingService.embedVector("project discovery")).thenReturn(vector);
+        when(embeddingService.embedVector(INSTRUCTED_QUERY)).thenReturn(vector);
         when(repository.search("Local_Ai_Work", vector, 5, 0.45)).thenReturn(List.of(match()));
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
                 new ProjectSemanticSearchRequest(
                         "Local_Ai_Work",
                         " project discovery ",
+                        null,
                         null,
                         null
                 )
@@ -35,11 +40,12 @@ class ProjectSemanticSearchServiceTest {
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.SUCCESS);
         assertThat(response.topK()).isEqualTo(5);
         assertThat(response.threshold()).isEqualTo(0.45);
+        assertThat(response.instructionEnabled()).isTrue();
         assertThat(response.queryEmbeddingDimension()).isEqualTo(1024);
         assertThat(response.resultCount()).isEqualTo(1);
         assertThat(response.results().get(0).rank()).isEqualTo(1);
         assertThat(response.results().get(0).filePath()).isEqualTo("Discovery.java");
-        verify(embeddingService).embedVector("project discovery");
+        verify(embeddingService).embedVector(INSTRUCTED_QUERY);
     }
 
     @Test
@@ -48,7 +54,7 @@ class ProjectSemanticSearchServiceTest {
         ProjectSemanticSearchRepository repository = mock(ProjectSemanticSearchRepository.class);
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Local_Ai_Work", "  ", 5, 0.50)
+                new ProjectSemanticSearchRequest("Local_Ai_Work", "  ", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.INVALID_REQUEST);
@@ -63,7 +69,7 @@ class ProjectSemanticSearchServiceTest {
         when(repository.count("Missing")).thenReturn(0L);
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Missing", "anything", 5, 0.50)
+                new ProjectSemanticSearchRequest("Missing", "anything", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.INDEX_NOT_FOUND);
@@ -79,7 +85,7 @@ class ProjectSemanticSearchServiceTest {
                 .thenThrow(new RuntimeException("connection refused"));
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50)
+                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.PROVIDER_UNAVAILABLE);
@@ -99,7 +105,7 @@ class ProjectSemanticSearchServiceTest {
         when(embeddingService.embedVector("query")).thenReturn(new float[768]);
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50)
+                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.DIMENSION_MISMATCH);
@@ -119,7 +125,7 @@ class ProjectSemanticSearchServiceTest {
         when(repository.count("Local_Ai_Work")).thenThrow(new RuntimeException("database down"));
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50)
+                new ProjectSemanticSearchRequest("Local_Ai_Work", "query", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.DATABASE_FAILED);
@@ -136,12 +142,36 @@ class ProjectSemanticSearchServiceTest {
         when(repository.search("Local_Ai_Work", vector, 5, 0.50)).thenReturn(List.of());
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
-                new ProjectSemanticSearchRequest("Local_Ai_Work", "unrelated", 5, 0.50)
+                new ProjectSemanticSearchRequest("Local_Ai_Work", "unrelated", 5, 0.50, false)
         );
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.SUCCESS);
         assertThat(response.resultCount()).isZero();
         assertThat(response.results()).isEmpty();
+    }
+
+    @Test
+    void supportsRawQueryOverride() {
+        EmbeddingService embeddingService = mock(EmbeddingService.class);
+        ProjectSemanticSearchRepository repository = mock(ProjectSemanticSearchRepository.class);
+        float[] vector = new float[1024];
+        when(repository.count("Local_Ai_Work")).thenReturn(1L);
+        when(embeddingService.embedVector("project discovery")).thenReturn(vector);
+        when(repository.search("Local_Ai_Work", vector, 5, 0.45)).thenReturn(List.of());
+
+        ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
+                new ProjectSemanticSearchRequest(
+                        "Local_Ai_Work",
+                        " project discovery ",
+                        null,
+                        null,
+                        false
+                )
+        );
+
+        assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.SUCCESS);
+        assertThat(response.instructionEnabled()).isFalse();
+        verify(embeddingService).embedVector("project discovery");
     }
 
     private ProjectSemanticSearchService service(
@@ -151,7 +181,17 @@ class ProjectSemanticSearchServiceTest {
         return new ProjectSemanticSearchService(
                 embeddingService,
                 repository,
-                new ProjectSearchProperties(5, 0.45, 20),
+                new ProjectSearchProperties(
+                        5,
+                        0.45,
+                        20,
+                        new ProjectSearchProperties.QueryInstruction(
+                                true,
+                                """
+                                        Instruct: Retrieve the most relevant source code or project documentation for the software project query.
+                                        Query: <USER_QUERY>"""
+                        )
+                ),
                 new IndexingProperties(1024)
         );
     }
