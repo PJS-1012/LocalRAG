@@ -128,7 +128,7 @@ $body = @{
   projectId = "Local_Ai_Work"
   query = "프로젝트 타입을 탐지하는 코드는 어디에 있나?"
   topK = 5
-  threshold = 0.50
+  threshold = 0.45
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post `
@@ -138,7 +138,7 @@ Invoke-RestMethod -Method Post `
 ```
 
 The response returns ranked Chunk content and citation-ready source metadata, never vectors. Search is always scoped
-by `projectId`. The initial evaluation baseline is Top-K 5 and similarity threshold 0.50; these are configurable
+by `projectId`. The current evaluation baseline is Top-K 5 and similarity threshold 0.45; these are configurable
 retrieval-tuning values rather than final quality constants.
 
 ## 기술 기준

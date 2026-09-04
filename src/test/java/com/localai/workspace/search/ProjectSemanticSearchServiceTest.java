@@ -21,7 +21,7 @@ class ProjectSemanticSearchServiceTest {
         float[] vector = new float[1024];
         when(repository.count("Local_Ai_Work")).thenReturn(10L);
         when(embeddingService.embedVector("project discovery")).thenReturn(vector);
-        when(repository.search("Local_Ai_Work", vector, 5, 0.50)).thenReturn(List.of(match()));
+        when(repository.search("Local_Ai_Work", vector, 5, 0.45)).thenReturn(List.of(match()));
 
         ProjectSemanticSearchResponse response = service(embeddingService, repository).search(
                 new ProjectSemanticSearchRequest(
@@ -34,7 +34,7 @@ class ProjectSemanticSearchServiceTest {
 
         assertThat(response.status()).isEqualTo(ProjectSemanticSearchStatus.SUCCESS);
         assertThat(response.topK()).isEqualTo(5);
-        assertThat(response.threshold()).isEqualTo(0.50);
+        assertThat(response.threshold()).isEqualTo(0.45);
         assertThat(response.queryEmbeddingDimension()).isEqualTo(1024);
         assertThat(response.resultCount()).isEqualTo(1);
         assertThat(response.results().get(0).rank()).isEqualTo(1);
@@ -151,7 +151,7 @@ class ProjectSemanticSearchServiceTest {
         return new ProjectSemanticSearchService(
                 embeddingService,
                 repository,
-                new ProjectSearchProperties(5, 0.50, 20),
+                new ProjectSearchProperties(5, 0.45, 20),
                 new IndexingProperties(1024)
         );
     }
