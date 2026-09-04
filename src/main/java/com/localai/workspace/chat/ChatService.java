@@ -18,4 +18,12 @@ public class ChatService {
                 .call()
                 .content();
     }
+
+    public String chat(String systemMessage, String userMessage) {
+        return chatClient.prompt()
+                .system(systemMessage)
+                .user(userMessage)
+                .call()
+                .content();
+    }
 }

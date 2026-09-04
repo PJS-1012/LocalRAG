@@ -6,7 +6,7 @@
 
 Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 5 - bounded RAG Context assembly
+Current: Phase 6 Step 6 - grounded RAG Chat with Citation validation
 
 ## Workspace discovery and file scan
 
@@ -164,6 +164,27 @@ paths, line ranges, and content. The 8,000-character default is an evaluation ba
 similarity order, but a Chunk that would exceed the remaining budget is excluded whole rather than truncated.
 Similarity remains available in `sources` metadata and is not written into the Context body. A successful search
 with no matches returns an empty Context.
+
+## RAG Chat
+
+Retrieve Project evidence and ask qwen3:8b for a cited answer:
+
+```powershell
+$body = @{
+  projectId = "Local_Ai_Work"
+  query = "프로젝트 타입은 어떻게 탐지해?"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:18080/api/workspaces/projects/rag/chat" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+The response contains the answer, citation-ready Source metadata, used and invalid Source IDs, Context size, and
+separate retrieval/Context, LLM, and total durations. Retrieved content is treated as untrusted evidence rather than
+instructions. Unknown or missing Citations are surfaced through warnings. A zero-Source search skips the model and
+returns `NO_EVIDENCE` deterministically.
 
 ## 기술 기준
 
