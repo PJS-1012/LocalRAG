@@ -4,9 +4,9 @@
 
 ## 현재 단계
 
-Phase 6 - Chunking foundation
+Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 2 - Project Chunk embedding
+Current: Phase 6 Step 3 - Project pgvector indexing
 
 ## Workspace discovery and file scan
 
@@ -99,6 +99,26 @@ Invoke-RestMethod -Method Post `
 
 The response contains only the first eight vector values per Chunk. Full vectors remain internal and are not stored.
 
+## Project vector indexing
+
+Read, chunk, embed, and transactionally synchronize one Project with pgvector:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  "http://localhost:18080/api/workspaces/projects/index?projectId=Local_Ai_Work"
+```
+
+Inspect stored Chunk count and vector metadata without returning vector values:
+
+```powershell
+Invoke-RestMethod `
+  "http://localhost:18080/api/workspaces/projects/index/stats?projectId=Local_Ai_Work"
+```
+
+Chunk IDs are deterministic. Reindexing updates changed Chunks, deletes stale Chunks only inside the selected
+Project, and leaves identical rows untouched. Embedding or dimension validation must complete for the whole Project
+before database synchronization begins. The current schema accepts only 1024-dimensional vectors.
+
 ## 기술 기준
 
 - Java 17
@@ -110,7 +130,7 @@ The response contains only the first eight vector values per Chunk. Full vectors
 - Ollama + Qwen3 8B
 - Qwen3 Embedding 0.6B
 
-현재 Embedding API는 텍스트를 1024차원 Vector로 변환합니다. Vector 저장과 검색은 이후 Phase에서 추가합니다.
+현재 Embedding API는 텍스트를 1024차원 Vector로 변환하며 Project 단위로 pgvector에 저장합니다. Vector 유사도 검색은 이후 Phase에서 추가합니다.
 
 ## Database
 

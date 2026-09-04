@@ -35,6 +35,8 @@ localrag:
     text-max-characters: 2000
     source-max-characters: 2400
     overlap-characters: 200
+  indexing:
+    expected-dimensions: 1024
   scan:
     max-file-size: 5MB
     include-extensions:
