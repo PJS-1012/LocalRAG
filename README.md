@@ -6,7 +6,7 @@
 
 Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 6 - grounded RAG Chat with Citation validation
+Current: Phase 6 complete - evaluated local RAG MVP
 
 ## Workspace discovery and file scan
 
