@@ -59,6 +59,16 @@ localrag:
       http-timeout: 3s
       max-output-characters: 65536
       max-models: 100
+    logs:
+      max-depth: 4
+      max-files: 20
+      max-visited-paths: 5000
+      default-results: 20
+      max-results: 100
+      tail-bytes-per-file: 262144
+      max-total-characters: 16000
+      max-stack-trace-lines: 8
+      max-query-characters: 200
   scan:
     max-file-size: 5MB
     include-extensions:
