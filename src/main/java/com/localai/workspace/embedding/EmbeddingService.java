@@ -18,12 +18,22 @@ public class EmbeddingService {
     }
 
     public EmbeddingResult embed(String text) {
-        float[] vector = embeddingModel.embed(text);
-        List<Float> preview = IntStream.range(0, Math.min(PREVIEW_SIZE, vector.length))
+        float[] vector = embedVector(text);
+        return new EmbeddingResult(vector.length, preview(vector));
+    }
+
+    public float[] embedVector(String text) {
+        return embeddingModel.embed(text);
+    }
+
+    public List<float[]> embedAll(List<String> texts) {
+        return embeddingModel.embed(List.copyOf(texts));
+    }
+
+    public List<Float> preview(float[] vector) {
+        return IntStream.range(0, Math.min(PREVIEW_SIZE, vector.length))
                 .mapToObj(index -> vector[index])
                 .toList();
-
-        return new EmbeddingResult(vector.length, preview);
     }
 
     public record EmbeddingResult(int dimensions, List<Float> preview) {
