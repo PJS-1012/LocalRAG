@@ -6,7 +6,7 @@
 
 Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 3 - Project pgvector indexing
+Current: Phase 6 Step 4 - Project vector similarity search
 
 ## Workspace discovery and file scan
 
@@ -118,6 +118,28 @@ Invoke-RestMethod `
 Chunk IDs are deterministic. Reindexing updates changed Chunks, deletes stale Chunks only inside the selected
 Project, and leaves identical rows untouched. Embedding or dimension validation must complete for the whole Project
 before database synchronization begins. The current schema accepts only 1024-dimensional vectors.
+
+## Project vector similarity search
+
+Embed a query and search only the selected Project with pgvector cosine similarity:
+
+```powershell
+$body = @{
+  projectId = "Local_Ai_Work"
+  query = "프로젝트 타입을 탐지하는 코드는 어디에 있나?"
+  topK = 5
+  threshold = 0.50
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:18080/api/workspaces/projects/search" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+The response returns ranked Chunk content and citation-ready source metadata, never vectors. Search is always scoped
+by `projectId`. The initial evaluation baseline is Top-K 5 and similarity threshold 0.50; these are configurable
+retrieval-tuning values rather than final quality constants.
 
 ## 기술 기준
 
