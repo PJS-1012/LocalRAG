@@ -46,6 +46,9 @@ localrag:
       template: |-
         Instruct: Retrieve the most relevant source code or project documentation for the software project query.
         Query: <USER_QUERY>
+  rag:
+    context:
+      max-characters: 8000
   scan:
     max-file-size: 5MB
     include-extensions:

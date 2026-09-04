@@ -6,7 +6,7 @@
 
 Phase 6 - Chunking and vector indexing
 
-Current: Phase 6 Step 4.3 - Query instruction enabled by default
+Current: Phase 6 Step 5 - bounded RAG Context assembly
 
 ## Workspace discovery and file scan
 
@@ -143,6 +143,28 @@ retrieval-tuning values rather than final quality constants. Query instruction i
 `localrag.search.query-instruction`. Send `"instructionEnabled": false` in the request to use the raw user Query.
 The response's `instructionEnabled` field reports the mode actually used.
 
+## RAG Context preview
+
+Search and assemble citation-ready Context without calling the chat model:
+
+```powershell
+$body = @{
+  projectId = "Local_Ai_Work"
+  query = "민감 파일을 어떻게 제외하지?"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:18080/api/workspaces/projects/rag/context/preview" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+The `localrag.rag.context.max-characters` setting limits the complete formatted Context, including Source headers,
+paths, line ranges, and content. The 8,000-character default is an evaluation baseline. Results are considered in
+similarity order, but a Chunk that would exceed the remaining budget is excluded whole rather than truncated.
+Similarity remains available in `sources` metadata and is not written into the Context body. A successful search
+with no matches returns an empty Context.
+
 ## 기술 기준
 
 - Java 17
@@ -154,7 +176,7 @@ The response's `instructionEnabled` field reports the mode actually used.
 - Ollama + Qwen3 8B
 - Qwen3 Embedding 0.6B
 
-현재 Embedding API는 텍스트를 1024차원 Vector로 변환하며 Project 단위로 pgvector에 저장합니다. Vector 유사도 검색은 이후 Phase에서 추가합니다.
+현재 Embedding API는 텍스트를 1024차원 Vector로 변환하며 Project 단위로 pgvector에 저장합니다. 검색 결과는 8,000자 예산 안에서 citation-ready RAG Context로 조립할 수 있습니다.
 
 ## Database
 
