@@ -28,7 +28,8 @@ class AgentChatControllerTest {
         AgentChatRequest request = new AgentChatRequest("Local_Ai_Work", "현재 Git 상태 알려줘");
         when(agentChatService.chat(request)).thenReturn(new AgentChatResponse(
                 request.projectId(), request.query(), "main 브랜치이며 깨끗합니다.",
-                List.of("getGitStatus"), 12, 1500, 1512, AgentChatStatus.SUCCESS, List.of()
+                List.of("getGitStatus"), 12, 1500, 1512, AgentChatStatus.SUCCESS, List.of(),
+                List.of(new AgentToolCall(1, "getGitStatus", 12, "SUCCESS", true, null))
         ));
 
         mockMvc.perform(post("/api/workspaces/projects/agent/chat")
@@ -39,7 +40,8 @@ class AgentChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.toolsUsed[0]").value("getGitStatus"))
-                .andExpect(jsonPath("$.toolExecutionDurationMillis").value(12));
+                .andExpect(jsonPath("$.toolExecutionDurationMillis").value(12))
+                .andExpect(jsonPath("$.toolCalls[0].sequence").value(1));
 
         verify(agentChatService).chat(request);
     }

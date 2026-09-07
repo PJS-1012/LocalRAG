@@ -11,6 +11,7 @@ public record AgentChatResponse(
         long llmDurationMillis,
         long totalDurationMillis,
         AgentChatStatus status,
-        List<String> warnings
+        List<String> warnings,
+        List<AgentToolCall> toolCalls
 ) {
 }

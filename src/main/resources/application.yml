@@ -50,6 +50,7 @@ localrag:
     context:
       max-characters: 8000
   agent:
+    context-window: 16384
     git:
       max-recent-commits: 20
       command-timeout: 5s

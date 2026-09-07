@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 @Component
 class DockerProcessRunner {
@@ -41,28 +43,41 @@ class DockerProcessRunner {
                 builder.directory(workingDirectory.toFile());
             }
             process = builder.start();
-            Process runningProcess = process;
-            CompletableFuture<BoundedOutput> outputFuture = CompletableFuture.supplyAsync(
-                    () -> readBounded(runningProcess)
-            );
-            boolean finished = process.waitFor(properties.commandTimeout().toMillis(), TimeUnit.MILLISECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                process.waitFor();
-            }
-            BoundedOutput output = outputFuture.join();
-            return new DockerCommandResult(
-                    true, finished ? process.exitValue() : -1, output.value(), !finished, output.truncated()
-            );
+            return awaitResult(process);
         } catch (IOException exception) {
             return new DockerCommandResult(false, -1, "", false, false);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             if (process != null) {
-                process.destroyForcibly();
+                terminateOwnedProcess(process);
             }
             return new DockerCommandResult(true, -1, "", true, false);
         }
+    }
+
+    // Package-private for a process/pipe timeout regression test; not an Agent Tool.
+    DockerCommandResult awaitResult(Process process) throws InterruptedException {
+        long timeout = properties.commandTimeout().toMillis();
+        CompletableFuture<BoundedOutput> outputFuture = CompletableFuture.supplyAsync(() -> readBounded(process));
+        boolean finished = process.waitFor(timeout, TimeUnit.MILLISECONDS);
+        if (!finished) {
+            terminateOwnedProcess(process);
+        }
+        try {
+            BoundedOutput output = outputFuture.get(timeout, TimeUnit.MILLISECONDS);
+            return new DockerCommandResult(
+                    true, finished ? process.exitValue() : -1, output.value(), !finished, output.truncated());
+        } catch (TimeoutException | ExecutionException exception) {
+            terminateOwnedProcess(process);
+            outputFuture.cancel(true);
+            return new DockerCommandResult(true, -1, "", true, true);
+        }
+    }
+
+    private void terminateOwnedProcess(Process process) {
+        // Compose is a CLI plugin process and may retain stdout after its parent is killed.
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
     }
 
     private BoundedOutput readBounded(Process process) {
