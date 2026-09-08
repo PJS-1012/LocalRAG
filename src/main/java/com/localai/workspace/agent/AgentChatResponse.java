@@ -12,6 +12,10 @@ public record AgentChatResponse(
         long totalDurationMillis,
         AgentChatStatus status,
         List<String> warnings,
-        List<AgentToolCall> toolCalls
+        List<AgentToolCall> toolCalls,
+        int knowledgeSourceCount,
+        List<AgentKnowledgeSource> knowledgeSources,
+        List<String> usedSourceIds,
+        List<String> invalidSourceIds
 ) {
 }

@@ -29,7 +29,8 @@ class AgentChatControllerTest {
         when(agentChatService.chat(request)).thenReturn(new AgentChatResponse(
                 request.projectId(), request.query(), "main 브랜치이며 깨끗합니다.",
                 List.of("getGitStatus"), 12, 1500, 1512, AgentChatStatus.SUCCESS, List.of(),
-                List.of(new AgentToolCall(1, "getGitStatus", 12, "SUCCESS", true, null))
+                List.of(new AgentToolCall(1, "getGitStatus", 12, "SUCCESS", true, null)),
+                0, List.of(), List.of(), List.of()
         ));
 
         mockMvc.perform(post("/api/workspaces/projects/agent/chat")
@@ -41,7 +42,10 @@ class AgentChatControllerTest {
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.toolsUsed[0]").value("getGitStatus"))
                 .andExpect(jsonPath("$.toolExecutionDurationMillis").value(12))
-                .andExpect(jsonPath("$.toolCalls[0].sequence").value(1));
+                .andExpect(jsonPath("$.toolCalls[0].sequence").value(1))
+                .andExpect(jsonPath("$.knowledgeSourceCount").value(0))
+                .andExpect(jsonPath("$.usedSourceIds").isEmpty())
+                .andExpect(jsonPath("$.invalidSourceIds").isEmpty());
 
         verify(agentChatService).chat(request);
     }

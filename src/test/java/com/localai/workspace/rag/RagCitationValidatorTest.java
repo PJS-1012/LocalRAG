@@ -42,6 +42,16 @@ class RagCitationValidatorTest {
         assertThat(validator.validate("근거 없음", List.of()).citationMissing()).isFalse();
     }
 
+    @Test
+    void validatesRequestScopedAgentKnowledgeIds() {
+        CitationValidationResult result = validator.validateAvailableSourceIds(
+                "Evidence [K1-S1], invented [K1-S99].", List.of("K1-S1"));
+
+        assertThat(result.usedSourceIds()).containsExactly("K1-S1", "K1-S99");
+        assertThat(result.invalidSourceIds()).containsExactly("K1-S99");
+        assertThat(result.citationMissing()).isFalse();
+    }
+
     private RagContextSource source(String id) {
         return new RagContextSource(
                 id, 1, "chunk-" + id, "Local_Ai_Work", "src/A.java", "A.java",

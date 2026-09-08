@@ -63,4 +63,23 @@ class AgentToolExecutionTest {
         assertThat(execution.status()).isEqualTo(AgentChatStatus.SUCCESS_WITH_WARNINGS);
         assertThat(execution.warnings()).singleElement().asString().contains("PARTIAL_SUCCESS");
     }
+
+    @Test
+    void capturesOnlyValidKnowledgeCitationMetadata() {
+        var delegate = mock(ToolCallback.class);
+        when(delegate.getToolDefinition()).thenReturn(ToolDefinition.builder()
+                .name("searchProjectKnowledge").description("test").inputSchema("{}").build());
+        when(delegate.call(anyString(), isNull())).thenReturn("""
+                {"status":"SUCCESS","sources":[
+                  {"citationId":"K1-S1","path":"src/A.java","startLine":4,"endLine":8,"content":"secret body"},
+                  {"citationId":"invalid","path":"src/B.java","startLine":1,"endLine":2}
+                ]}
+                """);
+        var execution = new AgentToolExecution();
+        execution.wrap(delegate).call("{}");
+
+        assertThat(execution.knowledgeSources()).containsExactly(
+                new AgentKnowledgeSource("K1-S1", "src/A.java", 4, 8));
+        assertThat(execution.knowledgeSources().toString()).doesNotContain("secret body");
+    }
 }

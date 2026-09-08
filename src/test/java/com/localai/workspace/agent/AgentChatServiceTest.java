@@ -1,6 +1,7 @@
 package com.localai.workspace.agent;
 
 import com.localai.workspace.chat.ChatService;
+import com.localai.workspace.rag.RagCitationValidator;
 import com.localai.workspace.rag.RagContextAssemblyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
@@ -20,7 +21,8 @@ class AgentChatServiceTest {
     final LogReadOnlyService logs = mock(LogReadOnlyService.class);
     final RagContextAssemblyService contexts = mock(RagContextAssemblyService.class);
     final AgentChatService service = new AgentChatService(chat, git, docker,
-            mock(OllamaReadOnlyService.class), db, logs, contexts, new LogSecretRedactor());
+            mock(OllamaReadOnlyService.class), db, logs, contexts, new LogSecretRedactor(),
+            new RagCitationValidator());
 
     @Test
     void recordsActualInterleavedOrderAndPreservesPartialResults() {
@@ -82,6 +84,64 @@ class AgentChatServiceTest {
         assertThat(result.status()).isEqualTo(AgentChatStatus.LLM_FAILED);
         assertThat(result.toolCalls()).hasSize(1);
         assertThat(result.warnings().toString()).contains("getDatabaseStatus").doesNotContain("private stack");
+    }
+
+    @Test
+    void policyExplicitlyBoundsSyntheticFactsAndInference() {
+        assertThat(AgentChatService.SYSTEM_PROMPT).contains(
+                "entire database is problem-free",
+                "cannot establish zero containers",
+                "no matching entry was found within the inspected files and range",
+                "do not prove that the commit caused the error",
+                "do not guess why inspection failed",
+                "returned citation ID such as [K1-S1]");
+    }
+
+    @Test
+    void validatesAndReturnsKnowledgeCitationMetadata() {
+        when(contexts.assemble(any())).thenReturn(ProjectKnowledgeAgentToolsTest.context("Local_Ai_Work"));
+        when(chat.chatWithToolCallbacks(anyString(), anyString(), any(ToolCallback[].class)))
+                .thenAnswer(inv -> {
+                    call(callbacks(inv.getArguments()), "searchProjectKnowledge",
+                            "{\"query\":\"type detection\"}");
+                    return "Project type is detected from markers [K1-S1].";
+                });
+
+        var result = service.chat(new AgentChatRequest("Local_Ai_Work", "Explain type detection"));
+
+        assertThat(result.status()).isEqualTo(AgentChatStatus.SUCCESS);
+        assertThat(result.knowledgeSourceCount()).isEqualTo(1);
+        assertThat(result.knowledgeSources()).singleElement().satisfies(source -> {
+            assertThat(source.id()).isEqualTo("K1-S1");
+            assertThat(source.filePath()).isEqualTo("src/A.java");
+            assertThat(source.startLine()).isEqualTo(10);
+            assertThat(source.endLine()).isEqualTo(12);
+        });
+        assertThat(result.usedSourceIds()).containsExactly("K1-S1");
+        assertThat(result.invalidSourceIds()).isEmpty();
+        assertThat(result.warnings()).isEmpty();
+    }
+
+    @Test
+    void warnsForMissingAndUnavailableKnowledgeCitations() {
+        when(contexts.assemble(any())).thenReturn(ProjectKnowledgeAgentToolsTest.context("Local_Ai_Work"));
+        when(chat.chatWithToolCallbacks(anyString(), anyString(), any(ToolCallback[].class)))
+                .thenAnswer(inv -> {
+                    call(callbacks(inv.getArguments()), "searchProjectKnowledge", "{\"query\":\"type\"}");
+                    return "Type detection uses markers.";
+                });
+        var missing = service.chat(new AgentChatRequest("Local_Ai_Work", "Explain type detection"));
+        assertThat(missing.status()).isEqualTo(AgentChatStatus.SUCCESS_WITH_WARNINGS);
+        assertThat(missing.warnings()).contains("Answer contains no knowledge Source citation despite available evidence");
+
+        when(chat.chatWithToolCallbacks(anyString(), anyString(), any(ToolCallback[].class)))
+                .thenAnswer(inv -> {
+                    call(callbacks(inv.getArguments()), "searchProjectKnowledge", "{\"query\":\"type\"}");
+                    return "Type detection uses markers [K1-S99].";
+                });
+        var invalid = service.chat(new AgentChatRequest("Local_Ai_Work", "Explain type detection"));
+        assertThat(invalid.invalidSourceIds()).containsExactly("K1-S99");
+        assertThat(invalid.warnings()).contains("Answer contains unavailable knowledge citations: K1-S99");
     }
 
     static ToolCallback[] callbacks(Object[] arguments) {
