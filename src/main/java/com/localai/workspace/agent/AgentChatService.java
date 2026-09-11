@@ -4,6 +4,10 @@ import com.localai.workspace.chat.ChatService;
 import com.localai.workspace.rag.CitationValidationResult;
 import com.localai.workspace.rag.RagCitationValidator;
 import com.localai.workspace.rag.RagContextAssemblyService;
+import com.localai.workspace.errors.ErrorSimilarityService;
+import com.localai.workspace.workflow.DevelopmentActivityService;
+import com.localai.workspace.workflow.ProjectProgressService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +35,12 @@ public class AgentChatService {
             - Possible problem after code changes: getGitDiffSummary or getRecentCommits, plus getRecentErrors.
               Use getGitStatus only if branch/working-tree status is needed. Correlation is not causation.
             - Project architecture, type detection, or implementation: searchProjectKnowledge only.
+            - Similar past error or previous resolution: findSimilarErrors only. A similar case is not proof that
+              the current cause is identical; distinguish unverified, verified, and resolved history.
+            - Current project progress, completed/remaining work, blockers, or documentation mismatch:
+              analyzeProjectProgress only. Never invent a completion percentage.
+            - Recent work, today's work, last 24 hours, last 7 days, or development summary:
+              summarizeRecentDevelopment only.
             - General Java ArrayList or other general concepts: no Tool.
             - Direct Git state: getGitStatus; recent work/commits: getRecentCommits; diff summary: getGitDiffSummary.
             - Docker reachability: getDockerStatus; running/named containers: getDockerContainers;
@@ -94,7 +104,11 @@ public class AgentChatService {
     private final RagContextAssemblyService contextService;
     private final LogSecretRedactor redactor;
     private final RagCitationValidator citationValidator;
+    private final ErrorSimilarityService similarityService;
+    private final ProjectProgressService progressService;
+    private final DevelopmentActivityService activityService;
 
+    @Autowired
     public AgentChatService(
             ChatService chatService,
             GitReadOnlyService gitService,
@@ -104,7 +118,10 @@ public class AgentChatService {
             LogReadOnlyService logService,
             RagContextAssemblyService contextService,
             LogSecretRedactor redactor,
-            RagCitationValidator citationValidator
+            RagCitationValidator citationValidator,
+            ErrorSimilarityService similarityService,
+            ProjectProgressService progressService,
+            DevelopmentActivityService activityService
     ) {
         this.chatService = chatService;
         this.gitService = gitService;
@@ -115,9 +132,44 @@ public class AgentChatService {
         this.contextService = contextService;
         this.redactor = redactor;
         this.citationValidator = citationValidator;
+        this.similarityService = similarityService;
+        this.progressService = progressService;
+        this.activityService = activityService;
+    }
+
+    AgentChatService(ChatService chatService, GitReadOnlyService gitService,
+            DockerReadOnlyService dockerService, OllamaReadOnlyService ollamaService,
+            DatabaseReadOnlyService databaseService, LogReadOnlyService logService,
+            RagContextAssemblyService contextService, LogSecretRedactor redactor,
+            RagCitationValidator citationValidator) {
+        this(chatService,gitService,dockerService,ollamaService,databaseService,logService,contextService,
+                redactor,citationValidator,null,null,null);
     }
 
     public AgentChatResponse chat(AgentChatRequest request) {
+        return chat(request, SYSTEM_PROMPT, new AgentToolExecution());
+    }
+
+    /** Uses the same read-only callbacks; no persistence Tool is registered. */
+    public AgentAnalysisRun analyzeError(AgentChatRequest request) {
+        var execution = new AgentToolExecution(true);
+        String policy = SYSTEM_PROMPT.substring(0, SYSTEM_PROMPT.indexOf("Routing:"));
+        // Error analysis replaces only the generic routing rules, preserving the trust policy below them.
+        policy += """
+                Error analysis routing: start with searchLogs for a named exception/phrase, otherwise getRecentErrors.
+                When matching error entries exist, use searchProjectKnowledge for relevant implementation evidence;
+                for connection errors use getDatabaseStatus; use Git only when the user asks about recent changes.
+                Other environment Tools are optional only when the question requires them. Never call all Tools.
+                If no matching error is found, report the bounded absence; do not invent an error or cause.
+                Separate Confirmed Evidence (actual Tool observations), Likely Cause (unverified hypotheses),
+                and Unknown. Never assert that a suggested cause or solution is verified or resolved.
+                """;
+        policy += SYSTEM_PROMPT.substring(SYSTEM_PROMPT.indexOf("For diagnosis,"));
+        var response = chat(request, policy, execution);
+        return new AgentAnalysisRun(response, execution.evidence());
+    }
+
+    private AgentChatResponse chat(AgentChatRequest request, String policy, AgentToolExecution execution) {
         long totalStartedAt = System.nanoTime();
         GitAgentTools gitTools = new GitAgentTools(request.projectId(), gitService);
         DockerAgentTools dockerTools = new DockerAgentTools(request.projectId(), dockerService);
@@ -125,15 +177,19 @@ public class AgentChatService {
         DatabaseAgentTools databaseTools = new DatabaseAgentTools(databaseService);
         LogAgentTools logTools = new LogAgentTools(request.projectId(), logService);
         var knowledgeTools = new ProjectKnowledgeAgentTools(request.projectId(), contextService, redactor);
-        var execution = new AgentToolExecution();
-        var callbacks = Arrays.stream(ToolCallbacks.from(
-                gitTools, dockerTools, ollamaTools, databaseTools, logTools, knowledgeTools))
+        List<Object> registeredTools = new ArrayList<>(List.of(
+                gitTools, dockerTools, ollamaTools, databaseTools, logTools, knowledgeTools));
+        if (similarityService != null && progressService != null && activityService != null) {
+            registeredTools.add(new DeveloperWorkflowAgentTools(request.projectId(), similarityService,
+                    progressService, activityService));
+        }
+        var callbacks = Arrays.stream(ToolCallbacks.from(registeredTools.toArray()))
                 .map(execution::wrap).toArray(org.springframework.ai.tool.ToolCallback[]::new);
         long llmStartedAt = System.nanoTime();
         String answer;
         try {
             answer = chatService.chatWithToolCallbacks(
-                    SYSTEM_PROMPT,
+                    policy,
                     userPrompt(request),
                     callbacks
             );

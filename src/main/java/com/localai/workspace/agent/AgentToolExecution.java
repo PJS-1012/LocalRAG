@@ -20,6 +20,11 @@ final class AgentToolExecution {
     private final List<AgentToolCall> calls = new ArrayList<>();
     private final List<JsonNode> arguments = new ArrayList<>();
     private final List<AgentKnowledgeSource> knowledgeSources = new ArrayList<>();
+    private final boolean captureEvidence;
+    private final List<ToolEvidence> evidence = new ArrayList<>();
+    AgentToolExecution() { this(false); }
+    AgentToolExecution(boolean captureEvidence) { this.captureEvidence = captureEvidence; }
+    synchronized List<ToolEvidence> evidence() { return List.copyOf(evidence); }
 
     ToolCallback wrap(ToolCallback delegate) {
         return new ToolCallback() {
@@ -86,10 +91,34 @@ final class AgentToolExecution {
         calls.add(new AgentToolCall(calls.size() + 1, name,
                 (System.nanoTime() - started) / 1_000_000, outcome, successful, duplicate));
         arguments.add(parsedInput);
+        if (captureEvidence && evidence.size() < 32) {
+            try {
+                evidence.add(new ToolEvidence(calls.size(), name, java.time.Instant.now(),
+                        sanitize(JSON.readTree(output))));
+            } catch (Exception ignored) {
+                evidence.add(new ToolEvidence(calls.size(), name, java.time.Instant.now(),
+                        JSON.createObjectNode().put("status", "EVIDENCE_UNAVAILABLE")));
+            }
+        }
         return output;
     }
 
     synchronized List<AgentToolCall> calls() { return List.copyOf(calls); }
+
+    private JsonNode sanitize(JsonNode node) {
+        if (node.isTextual()) return JSON.getNodeFactory().textNode(new LogSecretRedactor().redact(node.asText()));
+        if (node.isObject()) {
+            ObjectNode copy = JSON.createObjectNode();
+            node.fields().forEachRemaining(field -> copy.set(field.getKey(), sanitize(field.getValue())));
+            return copy;
+        }
+        if (node.isArray()) {
+            var copy = JSON.createArrayNode();
+            node.forEach(item -> copy.add(sanitize(item)));
+            return copy;
+        }
+        return node.deepCopy();
+    }
 
     synchronized List<AgentKnowledgeSource> knowledgeSources() { return List.copyOf(knowledgeSources); }
 
@@ -136,6 +165,12 @@ final class AgentToolExecution {
                     "Git chronology or changed paths do not establish causation with an error.";
             case "searchProjectKnowledge" ->
                     "Indexed snapshot only. Cite factual implementation claims with the returned citationId values.";
+            case "findSimilarErrors" ->
+                    "Past similarity is a candidate only, not proof of the current cause. Preserve each history trust label.";
+            case "analyzeProjectProgress" ->
+                    "Evidence-based snapshot only. Do not invent percentages or convert unknown/test gaps into completion.";
+            case "summarizeRecentDevelopment" ->
+                    "Git chronology and indexed Decision Logs describe observed changes, not unrecorded intent.";
             default -> "Use only fields explicitly returned by this Tool.";
         };
         annotated.put("answerBoundary", boundary);

@@ -6,9 +6,12 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 @Component
-class LogSecretRedactor {
+public class LogSecretRedactor {
 
     private static final List<Replacement> REPLACEMENTS = List.of(
+            replacement("(?i)((?:\"|')?(?:authorization|cookie|password|passwd|pwd|api[_-]?key|token|secret)(?:\"|')?\\s*[:=]\\s*)(?:\"[^\"]*\"|'[^']*')", "$1****"),
+            replacement("(?s)-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", "****"),
+            replacement("\\b(?:AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,})\\b", "****"),
             replacement("(?i)(authorization\\s*[:=]\\s*bearer\\s+)[^\\s,;]+", "$1****"),
             replacement("(?i)(authorization\\s*[:=]\\s*basic\\s+)[^\\s,;]+", "$1****"),
             replacement("(?i)(authorization\\s*[:=]\\s*)(?!bearer\\s+|basic\\s+)[^\\s,;]+", "$1****"),
@@ -21,7 +24,8 @@ class LogSecretRedactor {
                     Pattern.CASE_INSENSITIVE)
     );
 
-    String redact(String value) {
+    public String redact(String value) {
+        if (value == null) return null;
         String sanitized = value;
         for (Replacement replacement : REPLACEMENTS) {
             sanitized = replacement.pattern().matcher(sanitized).replaceAll(replacement.value());

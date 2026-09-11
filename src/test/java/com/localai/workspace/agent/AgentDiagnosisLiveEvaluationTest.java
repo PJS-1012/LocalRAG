@@ -47,6 +47,14 @@ class AgentDiagnosisLiveEvaluationTest {
 
     @Test
     void evaluatesRequestedScenariosWithRealModelAndIsolatedFaultInjection() throws Exception {
+        String selected=System.getenv("LOCALRAG_AGENT_EVAL_CASES");
+        var cases=selected==null
+                ? java.util.stream.IntStream.rangeClosed(1,13).mapToObj(i -> "LEGACY_Q"+i).toList()
+                : java.util.Arrays.stream(selected.split(",")).map(id -> "LEGACY_"+id).toList();
+        ErrorAnalysisLiveRunner.runCases(cases);
+    }
+
+    void executeCases() throws Exception {
         var report = new ArrayList<Map<String, Object>>();
         var observedContexts = new ArrayList<RagContextAssemblyResult>();
         var recordingContexts = spy(contexts);

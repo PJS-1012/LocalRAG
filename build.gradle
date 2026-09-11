@@ -47,4 +47,19 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    systemProperty 'localrag.eval.classpath', sourceSets.test.runtimeClasspath.asPath
+}
+
+tasks.register('errorAnalysisLiveEval', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.localai.workspace.agent.ErrorAnalysisLiveRunner'
+    systemProperty 'localrag.eval.timeout-seconds', '90'
+}
+
+tasks.register('developerWorkflowLiveEval', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.localai.workspace.agent.DeveloperWorkflowLiveRunner'
+    systemProperty 'localrag.eval.timeout-seconds', '90'
 }
