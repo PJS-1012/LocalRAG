@@ -79,6 +79,11 @@ localrag:
       max-total-characters: 16000
       max-stack-trace-lines: 8
       max-query-characters: 200
+  automation:
+    scheduler-enabled: true
+    poll-delay: PT30S
+    initial-delay: PT1M
+    max-log-results: 50
   scan:
     max-file-size: 5MB
     include-extensions:

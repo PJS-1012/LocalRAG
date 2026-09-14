@@ -11,6 +11,7 @@ public interface ErrorHistoryRepository extends JpaRepository<ErrorHistory, Long
     Page<ErrorHistory> findByProjectId(String projectId, Pageable pageable);
     long countByProjectIdAndStatus(String projectId, ErrorStatus status);
     List<ErrorHistory> findTop5ByProjectIdAndStatusOrderByRecordedAtDesc(String projectId, ErrorStatus status);
+    Optional<ErrorHistory> findTopByProjectIdOrderByRecordedAtDescIdDesc(String projectId);
 
     @Query(value="""
             SELECT h.* FROM error_history h
