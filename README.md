@@ -4,9 +4,28 @@
 
 ## 현재 단계
 
-Phase 6 - Chunking and vector indexing
+Phase 10 - Local developer dashboard
 
-Current: Phase 6 complete - evaluated local RAG MVP
+Current: Phase 10 implementation complete - React/Vite UI and Spring Boot overview API validated
+
+## Local developer dashboard
+
+The Phase 10 web UI provides one Project-scoped surface for Dashboard, RAG, Agent,
+Error History and Similar Error Retrieval, Progress, Activity, Automation, Run History,
+Notification Candidates, and local service status. Project actions use portable `projectId`
+values; the UI does not render absolute Workspace paths or expose arbitrary command execution.
+
+Start the backend, then run the Vite development server:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Vite proxies `/api` requests to the Spring Boot server at
+`http://localhost:18080`. A desktop shell and one-click local launcher are deferred; the
+current deliverable is the local web UI.
 
 ## Workspace discovery and file scan
 
@@ -191,6 +210,8 @@ returns `NO_EVIDENCE` deterministically.
 - Java 17
 - Spring Boot 3.5.16
 - Gradle 8.14.3 Wrapper
+- React 19 + TypeScript 5.9
+- Vite 7
 - PostgreSQL 17
 - pgvector 0.8.6
 - Spring AI 1.1.8
@@ -254,6 +275,12 @@ Invoke-RestMethod `
 
 ```powershell
 .\gradlew.bat test
+cd frontend
+npm test
+npm run build
 ```
 
 통합 테스트는 Testcontainers로 실제 pgvector 컨테이너를 실행하므로 Docker Desktop이 실행 중이어야 합니다.
+Phase 10 검증 기준은 Backend 173 tests, Frontend 7 tests, production build 성공입니다.
+실제 로컬 모델과 서비스가 필요한 smoke test 결과와 제약은
+`docs/phase10-portfolio-metrics.md`에 기록합니다.
