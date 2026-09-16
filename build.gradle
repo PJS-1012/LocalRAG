@@ -50,6 +50,10 @@ tasks.named('test') {
     systemProperty 'localrag.eval.classpath', sourceSets.test.runtimeClasspath.asPath
 }
 
+tasks.named('bootJar') {
+    archiveFileName = 'localrag-backend.jar'
+}
+
 tasks.register('errorAnalysisLiveEval', JavaExec) {
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath

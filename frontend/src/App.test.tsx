@@ -9,6 +9,7 @@ const projects=[
 ]
 beforeEach(()=>{localStorage.clear();vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
   const url=String(input)
+  if(url.includes('/api/health'))return new Response(JSON.stringify({status:'UP'}))
   if(url.includes('/discovery'))return new Response(JSON.stringify({workspaceRoot:'C:/workspace',projects,containers:[]}))
   if(url.includes('/overview'))return new Response(JSON.stringify({project:projects[url.includes('Room%2Fclient')?1:0],index:null,git:null,recentCommits:null,docker:null,projectContainers:null,ollama:null,database:null,errors:null,latestAutomation:null,notificationCandidateCount:0,unacknowledgedNotificationCount:0,warnings:[],collectedAt:new Date().toISOString(),durationMillis:1}))
   return new Response('{}')

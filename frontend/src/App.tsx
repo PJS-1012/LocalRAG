@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { workspaceApi } from './api/workspaceApi'
 import { dashboardApi } from './api/dashboardApi'
-import { ApiError } from './api/client'
+import { ApiError, waitForBackend, type BackendReadiness, type DesktopBackendStatus } from './api/client'
 import type { DetectedProject, ProjectOverview, WorkspaceDiscovery } from './types'
 import { StatusBadge } from './components/ui'
 import { statusTone } from './lib/format'
@@ -34,22 +34,40 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(localStorage.getItem('localrag.project') ?? '')
   const [overview, setOverview] = useState<ProjectOverview | null>(null)
   const [backendError, setBackendError] = useState<string | null>(null)
+  const [backendStatus, setBackendStatus] = useState<BackendReadiness>('STARTING')
+  const [backendDetail, setBackendDetail] = useState('Backend readiness 확인 중')
   const [navOpen, setNavOpen] = useState(false)
 
-  useEffect(() => {
-    workspaceApi.discovery().then(value => {
-      setDiscovery(value); setBackendError(null)
+  const connectBackend = useCallback(async () => {
+    setBackendStatus('STARTING'); setBackendDetail('Backend readiness 확인 중'); setBackendError(null)
+    const readiness = await waitForBackend(45, 1000, (status: DesktopBackendStatus) => {
+      setBackendStatus(status.state); setBackendDetail(status.detail)
+    })
+    if (readiness.state !== 'READY') {
+      setBackendStatus(readiness.state); setBackendDetail(readiness.detail)
+      setBackendError(readiness.state === 'PORT_IN_USE' ? 'Port 18080을 다른 프로세스가 사용 중입니다.' : 'LocalRAG Backend에 연결할 수 없습니다.')
+      return
+    }
+    setBackendStatus('READY'); setBackendError(null)
+    try {
+      const value = await workspaceApi.discovery()
+      setDiscovery(value)
       const valid = value.projects.some(project => project.projectId === selectedId)
       if (!valid && value.projects[0]) setSelectedId(value.projects[0].projectId)
-    }).catch((error: ApiError) => setBackendError(error.message))
-  }, []) // project choice is reconciled once after discovery
+    } catch (error) {
+      setBackendStatus('UNAVAILABLE')
+      setBackendError(error instanceof ApiError ? error.message : 'LocalRAG Backend에 연결할 수 없습니다.')
+    }
+  }, [selectedId])
+
+  useEffect(() => { void connectBackend() }, []) // project choice is reconciled once after discovery
 
   const refreshOverview = useCallback(() => {
     if (!selectedId) { setOverview(null); return Promise.resolve() }
     return dashboardApi.overview(selectedId).then(setOverview).catch(() => setOverview(null))
   }, [selectedId])
 
-  useEffect(() => { localStorage.setItem('localrag.project', selectedId); void refreshOverview() }, [selectedId, refreshOverview])
+  useEffect(() => { localStorage.setItem('localrag.project', selectedId); if (backendStatus === 'READY') void refreshOverview() }, [selectedId, refreshOverview, backendStatus])
 
   const selectedProject = useMemo<DetectedProject | null>(() => discovery?.projects.find(project => project.projectId === selectedId) ?? null, [discovery, selectedId])
   const pageProps = { projectId: selectedId, project: selectedProject, overview, refreshOverview }
@@ -62,14 +80,14 @@ export default function App() {
     activity: <ActivityPage {...pageProps} />,
     automation: <AutomationPage {...pageProps} />,
     notifications: <NotificationsPage {...pageProps} />,
-    settings: <SettingsPage {...pageProps} discovery={discovery} backendError={backendError} />,
+    settings: <SettingsPage {...pageProps} discovery={discovery} backendError={backendError} backendStatus={backendStatus} />,
   }[route]
 
   return <div className="app-shell">
     <aside className={`sidebar ${navOpen ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark">LR</div><div><strong>LocalRAG</strong><span>WORKBENCH</span></div></div>
       <nav>{NAV.map(item => <div key={item.id}>{item.group && <div className="nav-group">{item.group}</div>}<button className={route === item.id ? 'nav-active' : ''} onClick={() => { setRoute(item.id); setNavOpen(false) }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'notifications' && overview && overview.unacknowledgedNotificationCount > 0 && <em>{overview.unacknowledgedNotificationCount}</em>}</button></div>)}</nav>
-      <div className="sidebar-foot"><span className={`connection-light ${backendError ? 'offline' : ''}`} /><div><strong>{backendError ? 'Backend offline' : 'Local mode'}</strong><small>Java 17 · qwen3</small></div></div>
+      <div className="sidebar-foot"><span className={`connection-light ${backendStatus === 'READY' ? '' : 'offline'}`} /><div><strong>{backendStatus === 'STARTING' ? 'Backend starting' : backendError ? 'Backend offline' : 'Local mode'}</strong><small>Java 17 · qwen3</small></div></div>
     </aside>
     <div className="workspace">
       <header className="topbar">
@@ -82,7 +100,8 @@ export default function App() {
           <StatusBadge label={`Ollama ${overview?.ollama?.status ?? '—'}`} tone={statusTone(overview?.ollama?.status)} />
         </div>
       </header>
-      {backendError && <div className="backend-banner"><strong>LocalRAG Backend에 연결할 수 없습니다.</strong><span>launcher 또는 Backend 실행 상태를 확인해주세요.</span><button onClick={() => location.reload()}>다시 연결</button></div>}
+      {backendStatus === 'STARTING' && <div className="backend-banner starting"><strong>Backend 시작 중</strong><span>{backendDetail}</span></div>}
+      {backendError && <div className="backend-banner"><strong>{backendError}</strong><span>{backendDetail}</span><button onClick={() => void connectBackend()}>다시 연결</button></div>}
       <main className="main-content">{currentPage}</main>
     </div>
   </div>
