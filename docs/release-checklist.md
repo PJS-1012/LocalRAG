@@ -21,6 +21,33 @@ Validated on 2026-09-16.
 | Tauri | DEFERRED | Cargo unavailable; web UI + Launcher is release baseline |
 | Push | NOT_DONE | explicit approval required |
 
+## Phase 12 Desktop Packaging
+
+Validated on 2026-09-16.
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Rust/MSVC/WebView2 | PASS | Rust 1.98.1 MSVC target, VS C++ tools and WebView2 present |
+| Tauri compile | PASS | `cargo check`, 2 Rust tests |
+| Backend JAR | PASS | Java 17 `localrag-backend.jar`, 67.84 MB |
+| Desktop executable | PASS | Windows x64 executable, 11.58 MB |
+| Installer | PASS | unsigned NSIS setup, 62.47 MB |
+| Desktop security | PASS | core permission only; fixed loopback API bridge; CSP enabled |
+| Backend readiness | PASS | identified reuse/start/port-conflict decisions and bounded polling tested |
+| Production Window | PASS | `LocalRAG` native Window and `http://tauri.localhost/` WebView |
+| Project / Overview | PASS | 13 Projects; `Local_Ai_Work`; Docker/DB/Ollama AVAILABLE |
+| RAG | PASS | SUCCESS, 5 Sources, no UI error |
+| Agent Git | PASS | answer returned, `getGitStatus` trace |
+| Error / Progress | PASS | History empty-state and Progress action rendered |
+| Automation | PASS | Run Now SUCCESS, LLM skipped |
+| Failure scenarios | PASS_WITH_LIMITATION | bounded/unit paths verified; services were not deliberately stopped |
+| Backend tests | PASS | 174 tests, 0 failures/errors, 1 live skip |
+| Frontend tests | PASS | 11 tests in 7 files |
+| Development command | CONFIGURED | standard 5173 port already occupied by running Phase 11 launcher |
+| Computer Use | FALLBACK | helper failed workspace refresh; actual WebView was inspected through local CDP |
+| Code signing | DEFERRED | SmartScreen warning remains possible |
+| Push | NOT_DONE | explicit approval required |
+
 ## Launcher scenario coverage
 
 - A running services: actual repeat execution reused every component.

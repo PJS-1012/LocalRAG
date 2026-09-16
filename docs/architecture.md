@@ -8,8 +8,10 @@ canonical path checks, scan policy, sensitive-name filtering, file-size limits, 
 decoding protect every downstream read.
 
 ```text
-React/Vite UI
-  -> Spring Boot REST API
+Tauri Desktop Window
+  -> React/Vite UI
+     -> fixed loopback API bridge
+        -> Spring Boot REST API (bundled executable JAR or identified existing process)
      -> Workspace discovery and safe file scan
      -> Document read -> Chunk -> Ollama embedding -> pgvector
      -> Vector retrieval -> bounded context -> Ollama chat
@@ -29,7 +31,26 @@ input. No client state library or duplicate business rules were added.
 
 The nine screens are Dashboard, RAG, Agent, Errors, Progress, Activity, Automation,
 Notifications, and Settings. The Settings screen exposes availability only, never credentials
-or arbitrary filesystem controls. Vite proxies `/api` to port 18080 in development.
+or arbitrary filesystem controls. Vite proxies `/api` to port 18080 in browser development.
+In production Tauri, the client invokes one Rust command that accepts only `/api/**`, only
+GET/POST/PUT/PATCH, and always targets `127.0.0.1:18080`. External URLs, traversal, backslashes,
+DELETE and responses above 10 MB are rejected.
+
+## Desktop process boundary
+
+The Desktop executable checks both `/api/health` and Workspace discovery before reusing port
+18080. If the port is free, it starts only the bundled `backend/localrag-backend.jar` with the
+external Java 17 runtime and fixed loopback address/port arguments. It redirects stdout/stderr to
+the Tauri application log directory, records the child PID, and polls readiness for at most 60
+seconds. A non-LocalRAG listener becomes `PORT_IN_USE`; it is never terminated.
+
+The React shell independently exposes `STARTING`, `READY`, `UNAVAILABLE`, and `PORT_IN_USE` and
+uses a 45-second bounded retry. The app opens before Docker, Ollama, or PostgreSQL availability is
+known. Those integrations remain backend status data and do not control whether the Window exists.
+
+The current release intentionally does not call `Child::kill` or terminate another Java process.
+Dropping the Desktop Window therefore leaves a Tauri-started Backend running for safe reuse. A
+token-protected graceful shutdown channel is a future improvement, not an exposed actuator today.
 
 ## Backend overview boundary
 
@@ -75,11 +96,13 @@ listeners and reports an occupied port without terminating its owner. Runtime lo
 PIDs live under the ignored `.localrag/` directory.
 
 The Launcher never removes a container or volume, pulls a model, stops a process, or exposes
-these operations through Agent Tools. Tauri packaging, streaming, Windows notification
-delivery, and production deployment remain later-phase work.
+these operations through Agent Tools. The Tauri wrapper also has no shell or filesystem
+permission. Its only native command boundaries are Backend lifecycle status and the validated
+loopback API bridge.
 
-## Release deployment
+## Desktop release deployment
 
-The portfolio release is a local web application. Tauri is deferred because Rust/Cargo is not
-installed on the validated host and a wrapper would add packaging complexity without improving
-the demonstrated backend, retrieval, or workflow boundaries.
+`npm run desktop:build` first creates the fixed Spring Boot executable JAR and Vite production
+assets, then builds a Windows x64 executable and unsigned NSIS installer. The JAR is a read-only
+bundle resource. The release depends on an external Java 17 installation; a custom jlink runtime,
+code signing, auto-update, and Docker/Ollama control are intentionally outside Phase 12.

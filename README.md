@@ -28,6 +28,7 @@ Project -> Progress / Activity -> change-aware Automation
 - Error History, Verification Audit, Similar Error vector retrieval
 - Progress, Recent Activity, change-aware Automation과 Notification Candidates
 - React/Vite 기반 9개 화면의 Local Developer Dashboard
+- Tauri 2 기반 Windows Desktop Window와 NSIS installer
 
 ## Quick Start — Windows
 
@@ -56,11 +57,48 @@ Ollama, Spring Boot Backend, Vite Frontend를 순서대로 준비합니다. 기�
 
 Launcher는 컨테이너/volume 삭제, 모델 pull, 기존 프로세스 강제 종료를 수행하지 않습니다.
 
+## Desktop — Windows
+
+Desktop build도 기존 React UI와 Spring Boot Backend를 그대로 사용합니다. 설치 후
+`LocalRAG`를 실행하면 독립 Window가 열리고, port 18080에서 식별된 LocalRAG Backend를
+재사용하거나 bundle resource의 고정 `localrag-backend.jar`를 Java 17로 시작합니다.
+
+필수 환경:
+
+- Java 17이 `PATH`에서 실행 가능
+- Docker Desktop과 LocalRAG PostgreSQL/pgvector (DB 기능 사용 시)
+- Ollama와 `qwen3:8b`, `qwen3-embedding:0.6b` (AI 기능 사용 시)
+
+개발 및 installer build:
+
+```powershell
+cd frontend
+npm run desktop:dev
+npm run desktop:build
+```
+
+생성 위치:
+
+- 실행 파일: `frontend/src-tauri/target/release/localrag-desktop.exe`
+- NSIS installer: `frontend/src-tauri/target/release/bundle/nsis/LocalRAG_0.1.0_x64-setup.exe`
+
+Desktop은 Docker/Ollama를 범용 제어하지 않습니다. 해당 서비스가 꺼져 있어도 Window는
+유지되고 Backend 및 Settings의 상태 표시를 통해 장애 범위를 확인합니다. Backend가
+없거나 시작되지 않으면 `STARTING` 후 bounded timeout을 거쳐 `UNAVAILABLE`을 표시하며,
+다른 프로세스가 18080을 사용하면 종료하지 않고 `PORT_IN_USE`로 표시합니다.
+
+문제 해결:
+
+- Backend unavailable: Java 17과 Desktop Backend log를 확인합니다.
+- Docker/DB unavailable: Docker Desktop과 `local-ai-postgres` container를 확인합니다.
+- Ollama unavailable/model missing: Ollama와 위 두 모델 설치 상태를 확인합니다.
+- Port 18080 in use: 점유 프로세스를 자동 종료하지 않으므로 사용자가 충돌을 해소해야 합니다.
+
 ## Architecture
 
 ```text
-React/Vite UI
-  -> Spring Boot REST API
+Tauri Desktop -> React/Vite UI
+  -> fixed loopback API bridge -> Spring Boot REST API
      -> Workspace Discovery -> Safe Scan -> Document Read
      -> Chunk -> Ollama Embedding -> PostgreSQL/pgvector
      -> Retrieval -> 8,000-char Context -> qwen3:8b
@@ -96,9 +134,10 @@ React/Vite UI
 
 2026-09-16 로컬 Windows 환경 기준입니다. 캐시, 모델 warm-up과 시스템 부하에 따라 달라집니다.
 
-- Backend: 173 tests, 실패 0, opt-in live test 1개 skip
-- Frontend: 7 tests / 6 files, 실패 0
-- Production bundle: JS 272.58 kB (gzip 82.41 kB), CSS 22.10 kB (gzip 5.45 kB)
+- Backend: 174 tests, 실패 0, opt-in live test 1개 skip
+- Frontend: 11 tests / 7 files, 실패 0
+- Production bundle: JS 275.55 kB (gzip 83.54 kB), CSS 22.23 kB (gzip 5.49 kB)
+- Desktop: 11.58 MB exe, 62.47 MB unsigned NSIS installer
 - 실제 RAG: SUCCESS, Source 5개 / 사용 3개 / invalid citation 0, 17.56초
 - 실제 Progress: SUCCESS, LLM 21.57초 / total 25.51초
 - LLM 비활성 Automation Run Now: 374 ms
@@ -109,7 +148,7 @@ React/Vite UI
 ## Tech Stack
 
 - Java 17, Spring Boot 3.5.16, Spring AI 1.1.8, Gradle 8.14.3
-- React 19, TypeScript 5.9, Vite 7
+- React 19, TypeScript 5.9, Vite 7, Tauri 2.11, Rust 1.98
 - PostgreSQL 17, pgvector 0.8.6, Flyway V1–V6
 - Ollama, qwen3:8b, qwen3-embedding:0.6b
 - Docker Compose, Testcontainers, JUnit 5, Vitest
@@ -123,6 +162,9 @@ Docker Desktop이 실행 중이어야 Backend 통합 테스트가 pgvector Testc
 cd frontend
 npm test
 npm run build
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+cargo test --manifest-path .\src-tauri\Cargo.toml
+npm run desktop:build
 ```
 
 Launcher의 상태 전이와 금지 명령 검사는 다음으로 실행합니다.
@@ -136,8 +178,12 @@ Launcher의 상태 전이와 금지 명령 검사는 다음으로 실행합니�
 - Vector-only retrieval이라 migration/문서가 구현 코드보다 높게 노출되는 ranking 사례가 있습니다.
 - 실제 qwen 응답은 환경에 따라 약 15–50초가 걸릴 수 있습니다.
 - 최종 Agent Git 재확인 요청은 완료됐지만 실행 도구가 응답 JSON을 반환하지 않아 PARTIAL입니다.
-- UI는 desktop-first이며 최소 layout width는 720px입니다.
-- Tauri는 Rust toolchain 부재와 release 복잡도 대비 이점이 작아 deferred 상태입니다.
+- UI와 Tauri Window의 최소 width는 720px입니다.
+- Desktop은 외부 Java 17 설치를 요구하며 jlink runtime bundle은 deferred입니다.
+- 앱이 시작한 Backend는 PID를 추적하지만 앱 종료 시 강제 종료하지 않습니다. 현재 release는
+  안전한 graceful shutdown endpoint를 추가하지 않고 실행 중 Backend를 다음 실행에서 재사용합니다.
+- installer는 code signing하지 않아 Windows SmartScreen 경고가 표시될 수 있습니다.
+- Docker/Ollama/PostgreSQL 자동 시작 버튼은 packaging 핵심 범위 밖으로 deferred했습니다.
 - Vitest toolchain에 moderate 개발 의존성 advisory 2건이 있으며 수정에는 major upgrade가 필요합니다.
 - Launcher는 시작/재사용만 담당하며 서비스 종료 명령은 제공하지 않습니다.
 
