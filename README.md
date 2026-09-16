@@ -1,286 +1,150 @@
 # LocalRAG
 
-등록된 Workspace 안의 개발 프로젝트와 문서를 로컬에서 인덱싱하고 검색·분석하는 Local Development Knowledge & Workflow AI Agent 프로젝트입니다.
+LocalRAG는 PC 전체를 무작정 AI에 넣지 않고, 등록된 Workspace 안의 개발 Project만
+안전하게 탐색·인덱싱하여 검색, 근거 기반 답변, 읽기 전용 진단과 개발 Workflow 분석을
+제공하는 local-first Developer AI Workbench입니다.
 
-## 현재 단계
+## Why
 
-Phase 10 - Local developer dashboard
+로컬 개발 환경의 지식은 코드, 문서, Git, 컨테이너, 로그와 오류 이력에 흩어져 있습니다.
+LocalRAG는 이 정보를 Project 경계 안에서 연결하되, 민감 파일 차단과 실패 격리,
+읽기 전용 Tool 정책을 먼저 적용합니다. 검색 결과가 없으면 LLM을 호출하지 않고
+`NO_EVIDENCE`를 반환합니다.
 
-Current: Phase 10 implementation complete - React/Vite UI and Spring Boot overview API validated
-
-## Local developer dashboard
-
-The Phase 10 web UI provides one Project-scoped surface for Dashboard, RAG, Agent,
-Error History and Similar Error Retrieval, Progress, Activity, Automation, Run History,
-Notification Candidates, and local service status. Project actions use portable `projectId`
-values; the UI does not render absolute Workspace paths or expose arbitrary command execution.
-
-Start the backend, then run the Vite development server:
-
-```powershell
-cd frontend
-npm install
-npm run dev
+```text
+File / Code -> Document -> Chunk -> Embedding -> pgvector -> cited RAG
+Environment -> Git / Docker / DB / Ollama / Log -> read-only Agent
+Error -> Analysis -> History -> Verification Audit -> Similar Error
+Project -> Progress / Activity -> change-aware Automation
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` requests to the Spring Boot server at
-`http://localhost:18080`. A desktop shell and one-click local launcher are deferred; the
-current deliverable is the local web UI.
+## 주요 기능
 
-## Workspace discovery and file scan
+- Workspace/Container/Project 탐지와 Project-relative `projectId`
+- 민감 파일, 제외 경로, 5 MB 제한, UTF-8 및 link/path traversal 방어
+- 구조 경계를 우선하는 Chunking과 1024차원 Ollama Embedding
+- Project 범위 cosine search, citation-ready Context와 `NO_EVIDENCE`
+- Git/Docker/DB/Ollama/Log 기반 read-only Multi-Tool Agent
+- Error History, Verification Audit, Similar Error vector retrieval
+- Progress, Recent Activity, change-aware Automation과 Notification Candidates
+- React/Vite 기반 9개 화면의 Local Developer Dashboard
 
-The default Workspace root is `C:/workspace`. Override it with `LOCALRAG_WORKSPACE_ROOT`.
-A direct child with clear framework markers is a Project root. When a direct child is UNKNOWN, discovery checks
-only its immediate child directories. If marked Projects are found there, the parent is reported as a Container and
-only those child Project roots are returned for scanning. Discovery does not recurse further, and a Git repository
-alone does not imply a framework.
-Each Project exposes a portable `projectId` relative to the Workspace root, using `/` separators. Canonical
-single-Project APIs accept this ID as a query parameter.
+## Quick Start — Windows
 
+필수 환경은 Java 17, Node.js/npm, Docker Desktop, Ollama입니다. 다음 모델은 설치되어 있어야
+하며 Launcher가 자동으로 다운로드하지 않습니다.
 
-List Projects:
+- `qwen3:8b`
+- `qwen3-embedding:0.6b`
+
+프로젝트 루트에서 한 번 실행합니다.
 
 ```powershell
-Invoke-RestMethod http://localhost:18080/api/workspaces/projects
+powershell -ExecutionPolicy Bypass -File .\dev-start.ps1
 ```
 
-Inspect Projects and Containers:
+Launcher는 Docker Engine을 확인하고, LocalRAG의 `postgres` Compose service만 시작한 뒤
+Ollama, Spring Boot Backend, Vite Frontend를 순서대로 준비합니다. 기존 LocalRAG 인스턴스는
+재사용하고, 다른 프로세스가 18080/5173 포트를 사용하면 종료하지 않고 `PORT_IN_USE`로
+실패합니다. 로그와 PID 상태는 Git에서 제외된 `.localrag/`에 기록됩니다.
+
+준비가 끝나면 `http://localhost:5173`을 엽니다. 브라우저를 열지 않으려면:
 
 ```powershell
-Invoke-RestMethod http://localhost:18080/api/workspaces/discovery
+.\dev-start.ps1 -NoBrowser
 ```
 
-Scan Project file metadata:
+Launcher는 컨테이너/volume 삭제, 모델 pull, 기존 프로세스 강제 종료를 수행하지 않습니다.
 
-```powershell
-Invoke-RestMethod -Method Post "http://localhost:18080/api/workspaces/projects/scan?projectId=Room_Reservation%2FRoomReservation"
+## Architecture
+
+```text
+React/Vite UI
+  -> Spring Boot REST API
+     -> Workspace Discovery -> Safe Scan -> Document Read
+     -> Chunk -> Ollama Embedding -> PostgreSQL/pgvector
+     -> Retrieval -> 8,000-char Context -> qwen3:8b
+     -> Read-only Tools -> Agent
+     -> Error / Progress / Activity / Automation services
 ```
 
-The scan does not read or embed file content yet. It checks paths, names, extensions, and sizes, then reports:
+세부 구조와 신뢰 경계는 [Architecture](docs/architecture.md), 설계 근거는
+[Decision Logs](docs/decisions/)에 있습니다.
 
-- `SUPPORTED`
-- `SKIPPED_EXTENSION`
-- `SKIPPED_EXCLUDED_PATH`
-- `SKIPPED_SENSITIVE`
-- `SKIPPED_TOO_LARGE`
-- `METADATA_FAILED`
+## Retrieval Baseline
 
-The default file-size limit is 5MB. Unity Projects additionally exclude generated directories such as `Library`, `Temp`, `Logs`, and `UserSettings`.
+| 항목 | 기준값 |
+| --- | --- |
+| Chunk | Text/Markdown 2,000자, Source 2,400자, overlap 200자 |
+| Embedding | `qwen3-embedding:0.6b`, 1024 dimensions |
+| Search | cosine similarity, Project scoped, Top-K 5, threshold 0.45 |
+| Query | retrieval instruction 기본 ON, raw-query 전환 가능 |
+| Context | formatted context 최대 8,000자, Chunk 중간 절단 없음 |
+| Chat | `qwen3:8b`, Source citation, no evidence면 LLM skip |
 
-Read exactly one supported UTF-8 text file:
+## Safety Design
 
-```powershell
-Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/documents/read?projectId=Room_Reservation%2FRoomReservation&filePath=README.md"
-```
+- 외부 식별자는 절대 경로가 아닌 Workspace-relative `projectId` 사용
+- Workspace 밖 경로, `..`, symbolic link 우회 차단
+- 민감 파일명, 생성 폴더, Unity cache와 5 MB 초과 파일 차단
+- 파일/Project 단위 실패 격리와 엄격한 UTF-8 처리
+- Agent Tool은 read-only이며 출력 크기·시간 제한과 secret redaction 적용
+- Retrieved text, Git message와 Log는 신뢰하지 않는 evidence로 취급
+- Automation은 코드/Git/서비스 상태를 변경하지 않음
 
-The reader reapplies the scan policy before opening the file, enforces the Project boundary after resolving links,
-and returns `READ_FAILED` instead of aborting other work when UTF-8 decoding or file access fails.
+## Measured Release Baseline
 
-Read every allowed text file from one Project:
+2026-09-16 로컬 Windows 환경 기준입니다. 캐시, 모델 warm-up과 시스템 부하에 따라 달라집니다.
 
-```powershell
-Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/documents/read-all?projectId=Toy_Sports_Day%2Ftoy_sports_day"
-```
+- Backend: 173 tests, 실패 0, opt-in live test 1개 skip
+- Frontend: 7 tests / 6 files, 실패 0
+- Production bundle: JS 272.58 kB (gzip 82.41 kB), CSS 22.10 kB (gzip 5.45 kB)
+- 실제 RAG: SUCCESS, Source 5개 / 사용 3개 / invalid citation 0, 17.56초
+- 실제 Progress: SUCCESS, LLM 21.57초 / total 25.51초
+- LLM 비활성 Automation Run Now: 374 ms
+- Chrome 1440px 실제 렌더링: 9개 화면, Similar 탭, console 오류 및 가로 overflow 0
 
-The result reports success, failure, and skip counts; per-file paths, statuses, and reasons; total text bytes;
-and elapsed milliseconds. Reading is sequential and remains limited to the selected Project.
+상세 수치는 [Portfolio Highlights](docs/portfolio-highlights.md)에 있습니다.
 
-Scan metadata for every discovered Project root without reading content:
+## Tech Stack
 
-```powershell
-Invoke-RestMethod -Method Post http://localhost:18080/api/workspaces/scan
-```
+- Java 17, Spring Boot 3.5.16, Spring AI 1.1.8, Gradle 8.14.3
+- React 19, TypeScript 5.9, Vite 7
+- PostgreSQL 17, pgvector 0.8.6, Flyway V1–V6
+- Ollama, qwen3:8b, qwen3-embedding:0.6b
+- Docker Compose, Testcontainers, JUnit 5, Vitest
 
-The Workspace summary preserves each Project's type, detection hints, counts, oversized-file details, failure reason,
-and elapsed time. A failed Project does not stop later Project scans.
+## Tests
 
-## Chunk preview
-
-Create in-memory Chunks for one Project without embedding or persistence:
-
-```powershell
-Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/chunks/preview?projectId=Local_Ai_Work"
-```
-
-Text and Markdown use a 2,000-character maximum, source code uses 2,400 characters, and both use 200 characters of overlap. Structural boundaries are preferred when possible.
-
-## Chunk embedding preview
-
-Embed every in-memory Chunk from one Project without vector persistence:
+Docker Desktop이 실행 중이어야 Backend 통합 테스트가 pgvector Testcontainer를 사용합니다.
 
 ```powershell
-Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/chunks/embeddings/preview?projectId=Local_Ai_Work"
-```
-
-The response contains only the first eight vector values per Chunk. Full vectors remain internal and are not stored.
-
-## Project vector indexing
-
-Read, chunk, embed, and transactionally synchronize one Project with pgvector:
-
-```powershell
-Invoke-RestMethod -Method Post `
-  "http://localhost:18080/api/workspaces/projects/index?projectId=Local_Ai_Work"
-```
-
-Inspect stored Chunk count and vector metadata without returning vector values:
-
-```powershell
-Invoke-RestMethod `
-  "http://localhost:18080/api/workspaces/projects/index/stats?projectId=Local_Ai_Work"
-```
-
-Chunk IDs are deterministic. Reindexing updates changed Chunks, deletes stale Chunks only inside the selected
-Project, and leaves identical rows untouched. Embedding or dimension validation must complete for the whole Project
-before database synchronization begins. The current schema accepts only 1024-dimensional vectors.
-
-## Project vector similarity search
-
-Embed a query and search only the selected Project with pgvector cosine similarity:
-
-```powershell
-$body = @{
-  projectId = "Local_Ai_Work"
-  query = "프로젝트 타입을 탐지하는 코드는 어디에 있나?"
-  topK = 5
-  threshold = 0.45
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:18080/api/workspaces/projects/search" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-The response returns ranked Chunk content and citation-ready source metadata, never vectors. Search is always scoped
-by `projectId`. The current evaluation baseline is Top-K 5 and similarity threshold 0.45; these are configurable
-retrieval-tuning values rather than final quality constants. Query instruction is enabled by default through
-`localrag.search.query-instruction`. Send `"instructionEnabled": false` in the request to use the raw user Query.
-The response's `instructionEnabled` field reports the mode actually used.
-
-## RAG Context preview
-
-Search and assemble citation-ready Context without calling the chat model:
-
-```powershell
-$body = @{
-  projectId = "Local_Ai_Work"
-  query = "민감 파일을 어떻게 제외하지?"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:18080/api/workspaces/projects/rag/context/preview" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-The `localrag.rag.context.max-characters` setting limits the complete formatted Context, including Source headers,
-paths, line ranges, and content. The 8,000-character default is an evaluation baseline. Results are considered in
-similarity order, but a Chunk that would exceed the remaining budget is excluded whole rather than truncated.
-Similarity remains available in `sources` metadata and is not written into the Context body. A successful search
-with no matches returns an empty Context.
-
-## RAG Chat
-
-Retrieve Project evidence and ask qwen3:8b for a cited answer:
-
-```powershell
-$body = @{
-  projectId = "Local_Ai_Work"
-  query = "프로젝트 타입은 어떻게 탐지해?"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:18080/api/workspaces/projects/rag/chat" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-The response contains the answer, citation-ready Source metadata, used and invalid Source IDs, Context size, and
-separate retrieval/Context, LLM, and total durations. Retrieved content is treated as untrusted evidence rather than
-instructions. Unknown or missing Citations are surfaced through warnings. A zero-Source search skips the model and
-returns `NO_EVIDENCE` deterministically.
-
-## 기술 기준
-
-- Java 17
-- Spring Boot 3.5.16
-- Gradle 8.14.3 Wrapper
-- React 19 + TypeScript 5.9
-- Vite 7
-- PostgreSQL 17
-- pgvector 0.8.6
-- Spring AI 1.1.8
-- Ollama + Qwen3 8B
-- Qwen3 Embedding 0.6B
-
-현재 Embedding API는 텍스트를 1024차원 Vector로 변환하며 Project 단위로 pgvector에 저장합니다. 검색 결과는 8,000자 예산 안에서 citation-ready RAG Context로 조립할 수 있습니다.
-
-## Database
-
-```powershell
-docker compose up -d postgres
-docker compose ps
-```
-
-개발용 기본 접속 정보는 `.env.example`에 있습니다. 개인 설정은 `.env`에 작성하며 Git에 포함되지 않습니다.
-
-## 실행
-
-Windows PowerShell:
-
-```powershell
-docker compose up -d postgres
-.\gradlew.bat bootRun --args="--server.port=18080"
-```
-
-Health API:
-
-```powershell
-Invoke-RestMethod http://localhost:18080/api/health
-Invoke-RestMethod http://localhost:18080/actuator/health
-```
-
-Chat API:
-
-```powershell
-$body = @{ message = "Java 17의 장점을 한 문장으로 설명해줘." } | ConvertTo-Json
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:18080/api/chat `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-기본 모델은 `qwen3:8b`이며 `OLLAMA_CHAT_MODEL` 환경 변수로 변경할 수 있습니다. 애플리케이션은 모델을 자동으로 내려받지 않습니다.
-
-Embedding API:
-
-```powershell
-$body = @{ text = "예약 생성 로직" } | ConvertTo-Json
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:18080/api/embeddings `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-기본 Embedding 모델은 `qwen3-embedding:0.6b`이며 실제 출력은 1024차원입니다. API는 확인용으로 앞 8개 값만 반환합니다.
-
-## 테스트
-
-```powershell
-.\gradlew.bat test
+.\gradlew.bat test --no-daemon
 cd frontend
 npm test
 npm run build
 ```
 
-통합 테스트는 Testcontainers로 실제 pgvector 컨테이너를 실행하므로 Docker Desktop이 실행 중이어야 합니다.
-Phase 10 검증 기준은 Backend 173 tests, Frontend 7 tests, production build 성공입니다.
-실제 로컬 모델과 서비스가 필요한 smoke test 결과와 제약은
-`docs/phase10-portfolio-metrics.md`에 기록합니다.
+Launcher의 상태 전이와 금지 명령 검사는 다음으로 실행합니다.
+
+```powershell
+.\scripts\DevLauncher.Tests.ps1
+```
+
+## Known Limitations
+
+- Vector-only retrieval이라 migration/문서가 구현 코드보다 높게 노출되는 ranking 사례가 있습니다.
+- 실제 qwen 응답은 환경에 따라 약 15–50초가 걸릴 수 있습니다.
+- 최종 Agent Git 재확인 요청은 완료됐지만 실행 도구가 응답 JSON을 반환하지 않아 PARTIAL입니다.
+- UI는 desktop-first이며 최소 layout width는 720px입니다.
+- Tauri는 Rust toolchain 부재와 release 복잡도 대비 이점이 작아 deferred 상태입니다.
+- Vitest toolchain에 moderate 개발 의존성 advisory 2건이 있으며 수정에는 major upgrade가 필요합니다.
+- Launcher는 시작/재사용만 담당하며 서비스 종료 명령은 제공하지 않습니다.
+
+## Portfolio Documents
+
+- [Architecture](docs/architecture.md)
+- [Portfolio Highlights](docs/portfolio-highlights.md)
+- [Interview Stories](docs/interview-stories.md)
+- [Release Checklist](docs/release-checklist.md)
+- [Phase 10 Metrics](docs/phase10-portfolio-metrics.md)

@@ -25,8 +25,7 @@ The React application is a thin Project-scoped client. `App.tsx` owns navigation
 selection, discovery, and overview loading. Page components own feature inputs and result
 presentation; API modules own HTTP contracts and normalize server errors. Although legacy
 discovery responses contain root metadata, the UI neither renders it nor accepts absolute-path
-input. No client state
-library or duplicate business rules were added.
+input. No client state library or duplicate business rules were added.
 
 The nine screens are Dashboard, RAG, Agent, Errors, Progress, Activity, Automation,
 Notifications, and Settings. The Settings screen exposes availability only, never credentials
@@ -57,7 +56,7 @@ Project evidence -> progress/activity -> automation run -> notification candidat
 ```
 
 Retrieval remains Top-K 5, threshold 0.45, Query Instruction enabled, vector-only sequential
-search. Phase 10 deliberately does not change prompts, chunking, ranking, or model settings.
+search. Release hardening does not change prompts, chunking, ranking, or model settings.
 
 ## Failure isolation and security
 
@@ -67,8 +66,20 @@ search. Phase 10 deliberately does not change prompts, chunking, ranking, or mod
 - RAG content is untrusted evidence; citations and no-evidence behavior remain explicit.
 - Automation persists bounded summaries and candidates but does not change source, Git, or service state.
 
-## Deployment baseline and backlog
+## Development startup boundary
 
-Development runs PostgreSQL with Docker Compose, Ollama as a local service, Spring Boot on
-port 18080, and Vite on port 5173. Tauri packaging, a one-click launcher, streaming, Windows
-notifications, and production deployment are later-phase work.
+`dev-start.ps1` is the only startup mutation boundary. It checks Docker readiness, starts only
+the fixed `postgres` Compose service when needed, checks or starts the fixed Ollama executable,
+and then starts Spring Boot on port 18080 and Vite on port 5173. It reuses identified LocalRAG
+listeners and reports an occupied port without terminating its owner. Runtime logs and listener
+PIDs live under the ignored `.localrag/` directory.
+
+The Launcher never removes a container or volume, pulls a model, stops a process, or exposes
+these operations through Agent Tools. Tauri packaging, streaming, Windows notification
+delivery, and production deployment remain later-phase work.
+
+## Release deployment
+
+The portfolio release is a local web application. Tauri is deferred because Rust/Cargo is not
+installed on the validated host and a wrapper would add packaging complexity without improving
+the demonstrated backend, retrieval, or workflow boundaries.
