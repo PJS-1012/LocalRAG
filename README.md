@@ -137,7 +137,7 @@ Tauri Desktop -> React/Vite UI
 - Backend: 174 tests, 실패 0, opt-in live test 1개 skip
 - Frontend: 11 tests / 7 files, 실패 0
 - Production bundle: JS 275.55 kB (gzip 83.54 kB), CSS 22.23 kB (gzip 5.49 kB)
-- Desktop: 11.58 MB exe, 62.47 MB unsigned NSIS installer
+- Desktop: 11.49 MB exe, 62.46 MB unsigned NSIS installer
 - 실제 RAG: SUCCESS, Source 5개 / 사용 3개 / invalid citation 0, 17.56초
 - 실제 Progress: SUCCESS, LLM 21.57초 / total 25.51초
 - LLM 비활성 Automation Run Now: 374 ms

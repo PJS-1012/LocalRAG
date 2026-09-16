@@ -30,8 +30,8 @@ Validated on 2026-09-16.
 | Rust/MSVC/WebView2 | PASS | Rust 1.98.1 MSVC target, VS C++ tools and WebView2 present |
 | Tauri compile | PASS | `cargo check`, 2 Rust tests |
 | Backend JAR | PASS | Java 17 `localrag-backend.jar`, 67.84 MB |
-| Desktop executable | PASS | Windows x64 executable, 11.58 MB |
-| Installer | PASS | unsigned NSIS setup, 62.47 MB |
+| Desktop executable | PASS | Windows x64 executable, 11.49 MB |
+| Installer | PASS | unsigned NSIS setup, 62.46 MB |
 | Desktop security | PASS | core permission only; fixed loopback API bridge; CSP enabled |
 | Backend readiness | PASS | identified reuse/start/port-conflict decisions and bounded polling tested |
 | Production Window | PASS | `LocalRAG` native Window and `http://tauri.localhost/` WebView |

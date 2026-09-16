@@ -50,7 +50,7 @@ boundary.
 - `cargo check` and 2 Rust lifecycle/security tests passed.
 - 174 Backend tests passed; 1 opt-in live test skipped.
 - 11 Frontend tests passed; Vite production build passed.
-- Tauri produced an 11.58 MB executable and a 62.47 MB unsigned NSIS installer.
+- Tauri produced an 11.49 MB executable and a 62.46 MB unsigned NSIS installer.
 - An actual production `LocalRAG` Window loaded 13 Projects and selected `Local_Ai_Work`.
 - RAG returned SUCCESS with 5 Sources; Agent used `getGitStatus`; Error History and Progress loaded;
   Automation Run Now returned SUCCESS with LLM skipped.

@@ -51,7 +51,7 @@ Validated on the local Windows host on 2026-09-16:
 - Frontend: 11 tests across 7 files, all passing; Rust Desktop lifecycle/security: 2 tests.
 - Vite production build: 52 modules; JS 275.55 kB / gzip 83.54 kB;
   CSS 22.23 kB / gzip 5.49 kB.
-- Tauri production artifacts: 11.58 MB executable and 62.47 MB unsigned NSIS installer.
+- Tauri production artifacts: 11.49 MB executable and 62.46 MB unsigned NSIS installer.
 - Actual production WebView smoke: 13 Projects rendered; `Local_Ai_Work` Dashboard available;
   RAG SUCCESS with 5 Sources; Agent used `getGitStatus`; Error History and Progress rendered;
   Automation Run Now returned SUCCESS with LLM skipped.
