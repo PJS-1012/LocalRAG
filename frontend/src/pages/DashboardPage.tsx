@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { indexApi } from '../api/indexApi'
 import { ApiError } from '../api/client'
 import { EmptyState, ErrorNotice, LoadingState, Metric, PageHeader, Panel, StatusBadge } from '../components/ui'
-import { formatDate, formatDuration, relativeTime, shortHash, statusTone } from '../lib/format'
+import { formatDuration, relativeTime, statusTone } from '../lib/format'
+import { CommitList, remoteLabel } from '../components/ProjectList'
+import type { DashboardGit } from '../types'
 import type { ProjectPageProps } from './pageTypes'
 
-export default function DashboardPage({ projectId, project, overview, refreshOverview }: ProjectPageProps) {
+export default function DashboardPage({ projectId, project, overview, refreshOverview, gitSummary }: ProjectPageProps & { gitSummary: DashboardGit | null }) {
   const [indexing, setIndexing] = useState(false)
   const [indexResult, setIndexResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +37,8 @@ export default function DashboardPage({ projectId, project, overview, refreshOve
         <div className="service-list">{[['Docker',overview.docker],['PostgreSQL / pgvector',overview.database],['Ollama',overview.ollama],['Project container',overview.projectContainers]].map(([name,value]) => <div key={name as string}><span>{name as string}</span><StatusBadge label={(value as typeof overview.docker)?.status ?? 'UNAVAILABLE'} tone={statusTone((value as typeof overview.docker)?.status)} /></div>)}</div>
       </Panel>
       <Panel className="panel-wide"><div className="panel-heading"><div><span className="eyebrow">DEVELOPMENT</span><h2>Recent commits</h2></div><span className="muted">{overview.recentCommits?.commits.length ?? 0} records</span></div>
-        {overview.recentCommits?.commits.length ? <div className="commit-list">{overview.recentCommits.commits.slice(0,4).map(commit => <div key={commit.hash}><code>{shortHash(commit.hash)}</code><strong>{commit.message}</strong><span>{commit.author} · {formatDate(commit.timestamp)}</span></div>)}</div> : <div className="inline-empty">최근 commit 정보가 없습니다.</div>}
+        <p className="metadata-note">{remoteLabel(gitSummary)} · 로컬 upstream 참조 기준</p>
+        {gitSummary?.commits.length ? <CommitList git={gitSummary} /> : <div className="inline-empty">최근 commit 정보가 없습니다.</div>}
       </Panel>
       <Panel><div className="panel-heading"><div><span className="eyebrow">ERRORS</span><h2>Verification state</h2></div></div><div className="triple-count"><div><strong>{overview.errors?.unverified ?? 0}</strong><span>Unverified</span></div><div><strong>{overview.errors?.verified ?? 0}</strong><span>Verified</span></div><div><strong>{overview.errors?.resolved ?? 0}</strong><span>Resolved</span></div></div></Panel>
       <Panel><div className="panel-heading"><div><span className="eyebrow">AUTOMATION</span><h2>Latest run</h2></div>{overview.latestAutomation && <StatusBadge label={overview.latestAutomation.status} tone={statusTone(overview.latestAutomation.status)} />}</div>

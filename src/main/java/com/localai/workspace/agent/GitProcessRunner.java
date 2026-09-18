@@ -35,6 +35,10 @@ class GitProcessRunner {
         return run(projectRoot, List.of("diff", "--numstat", "HEAD", "--"));
     }
 
+    GitCommandResult upstream(Path root) { return run(root, List.of("rev-parse", "--verify", "@{upstream}")); }
+    GitCommandResult divergence(Path root, String upstreamSha) { return run(root, List.of("rev-list", "--left-right", "--count", "HEAD..." + upstreamSha)); }
+    GitCommandResult isAncestor(Path root, String sha, String upstreamSha) { return run(root, List.of("merge-base", "--is-ancestor", sha, upstreamSha)); }
+
     private GitCommandResult run(Path projectRoot, List<String> gitArguments) {
         List<String> command = new ArrayList<>();
         command.add("git");

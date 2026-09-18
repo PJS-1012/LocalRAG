@@ -11,6 +11,7 @@ beforeEach(()=>{localStorage.clear();vi.stubGlobal('fetch',vi.fn(async(input:Req
   const url=String(input)
   if(url.includes('/api/health'))return new Response(JSON.stringify({status:'UP'}))
   if(url.includes('/discovery'))return new Response(JSON.stringify({workspaceRoot:'C:/workspace',projects,containers:[]}))
+  if(url === '/api/workspaces/overview')return new Response(JSON.stringify({projects:projects.map(project=>({project,git:null,indexedDocumentCount:0,indexedChunkCount:0,automationStatus:'DISABLED',errorHistoryCount:0,notificationCount:0,warnings:[]})),collectedAt:new Date().toISOString(),durationMillis:1,remoteBasis:'cached upstream'}))
   if(url.includes('/overview'))return new Response(JSON.stringify({project:projects[url.includes('Room%2Fclient')?1:0],index:null,git:null,recentCommits:null,docker:null,projectContainers:null,ollama:null,database:null,errors:null,latestAutomation:null,notificationCandidateCount:0,unacknowledgedNotificationCount:0,warnings:[],collectedAt:new Date().toISOString(),durationMillis:1}))
   return new Response('{}')
 }))

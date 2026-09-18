@@ -38,6 +38,17 @@ export interface GitStatus {
 }
 
 export interface RecentCommit { hash: string; message: string; author: string; timestamp: string }
+export interface DashboardGit {
+  status: string; branch: string | null; clean: boolean | null; upstream: string | null
+  ahead: number | null; behind: number | null; remoteStatus: string; reason: string | null
+  commits: Array<RecentCommit & { pushStatus: string }>
+}
+export interface ProjectSummary {
+  project: DetectedProject; git: DashboardGit | null; indexedDocumentCount: number | null
+  indexedChunkCount: number | null; automationStatus: string; errorHistoryCount: number | null
+  notificationCount: number | null; warnings: string[]
+}
+export interface WorkspaceOverview { projects: ProjectSummary[]; collectedAt: string; durationMillis: number; remoteBasis: string }
 export interface GitRecentCommits { status: string; commits: RecentCommit[]; reason: string | null }
 export interface EnvironmentStatus { status: string; reason: string | null; [key: string]: unknown }
 

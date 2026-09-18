@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { workspaceApi } from './api/workspaceApi'
 import { dashboardApi } from './api/dashboardApi'
-import { ApiError, waitForBackend, type BackendReadiness, type DesktopBackendStatus } from './api/client'
-import type { DetectedProject, ProjectOverview, WorkspaceDiscovery } from './types'
+import { ApiError, isTauriRuntime, retryStartup, waitForBackend, type BackendReadiness, type DesktopBackendStatus } from './api/client'
+import type { DetectedProject, ProjectOverview, WorkspaceDiscovery, WorkspaceOverview } from './types'
+import StartupScreen from './components/StartupScreen'
+import ProjectList from './components/ProjectList'
 import { StatusBadge } from './components/ui'
 import { statusTone } from './lib/format'
 import DashboardPage from './pages/DashboardPage'
@@ -37,12 +39,26 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState<BackendReadiness>('STARTING')
   const [backendDetail, setBackendDetail] = useState('Backend readiness 확인 중')
   const [navOpen, setNavOpen] = useState(false)
+  const [startup, setStartup] = useState<DesktopBackendStatus>({ state: 'STARTING', detail: 'Runtime 준비 중', managed: false, pid: null })
+  const [summary, setSummary] = useState<WorkspaceOverview | null>(null)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const refreshSummary = useCallback(async () => {
+    setSummaryError(null)
+    try {
+      const value = await dashboardApi.summary()
+      if (!Array.isArray(value.projects)) throw new Error('Invalid summary response')
+      setSummary(value)
+    } catch { setSummaryError('Project metadata를 불러오지 못했습니다. Refresh metadata로 다시 시도하세요.') }
+  }, [])
 
   const connectBackend = useCallback(async () => {
     setBackendStatus('STARTING'); setBackendDetail('Backend readiness 확인 중'); setBackendError(null)
-    const readiness = await waitForBackend(45, 1000, (status: DesktopBackendStatus) => {
+    setStartup({ state: 'STARTING', detail: 'Runtime 준비 중', managed: false, pid: null })
+    const readiness = await waitForBackend(isTauriRuntime() ? 510 : 45, 1000, (status: DesktopBackendStatus) => {
+      setStartup(status)
       setBackendStatus(status.state); setBackendDetail(status.detail)
     })
+    setStartup(readiness)
     if (readiness.state !== 'READY') {
       setBackendStatus(readiness.state); setBackendDetail(readiness.detail)
       setBackendError(readiness.state === 'PORT_IN_USE' ? 'Port 18080을 다른 프로세스가 사용 중입니다.' : 'LocalRAG Backend에 연결할 수 없습니다.')
@@ -61,6 +77,11 @@ export default function App() {
   }, [selectedId])
 
   useEffect(() => { void connectBackend() }, []) // project choice is reconciled once after discovery
+  useEffect(() => { if (backendStatus === 'READY') void refreshSummary() }, [backendStatus, refreshSummary])
+  const retryRuntime = async () => {
+    try { await retryStartup(); await connectBackend() }
+    catch { setStartup(value => ({ ...value, state: 'UNAVAILABLE', detail: 'Startup 재시도 요청 실패' })) }
+  }
 
   const refreshOverview = useCallback(() => {
     if (!selectedId) { setOverview(null); return Promise.resolve() }
@@ -72,7 +93,7 @@ export default function App() {
   const selectedProject = useMemo<DetectedProject | null>(() => discovery?.projects.find(project => project.projectId === selectedId) ?? null, [discovery, selectedId])
   const pageProps = { projectId: selectedId, project: selectedProject, overview, refreshOverview }
   const currentPage = {
-    dashboard: <DashboardPage {...pageProps} />,
+    dashboard: <><ProjectList summary={summary} error={summaryError} retry={() => void refreshSummary()} /><DashboardPage {...pageProps} gitSummary={summary?.projects.find(p => p.project.projectId === selectedId)?.git ?? null} /></>,
     knowledge: <RagPage {...pageProps} />,
     agent: <AgentPage {...pageProps} />,
     errors: <ErrorsPage {...pageProps} />,
@@ -80,9 +101,10 @@ export default function App() {
     activity: <ActivityPage {...pageProps} />,
     automation: <AutomationPage {...pageProps} />,
     notifications: <NotificationsPage {...pageProps} />,
-    settings: <SettingsPage {...pageProps} discovery={discovery} backendError={backendError} backendStatus={backendStatus} />,
+    settings: <SettingsPage {...pageProps} discovery={discovery} backendError={backendError} backendStatus={backendStatus} retryStartup={() => void retryRuntime()} />,
   }[route]
 
+  if (isTauriRuntime() && backendStatus !== 'READY') return <StartupScreen status={startup} retry={() => void retryRuntime()} />
   return <div className="app-shell">
     <aside className={`sidebar ${navOpen ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark">LR</div><div><strong>LocalRAG</strong><span>WORKBENCH</span></div></div>

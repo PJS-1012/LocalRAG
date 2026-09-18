@@ -1,0 +1,36 @@
+/* Desktop readability: retain density while lifting secondary information. */
+.panel-heading h2 { font-size: 18px; }
+.detail-list dt, .detail-list dd, .service-list > div > span, .muted,
+.panel-heading > span, .panel-heading small, .notice { font-size: 14px; line-height: 1.5; }
+.table-wrap td, .table-wrap td strong, .table-wrap td code { font-size: 13px; }
+.table-wrap th { font-size: 12px; }
+.metric small { font-size: 13px; color: #a1b1c5; }
+.metric > span, .eyebrow { font-size: 11px; color: #95a9c2; }
+.commit-list > div { grid-template-columns: 110px minmax(0,1fr) auto; gap: 10px 16px; padding: 16px 0; }
+.commit-list code { font: 600 15px/1.5 "Cascadia Code", Consolas, monospace; color: #a5e3ff; }
+.commit-list strong { font-size: 15px; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.commit-list .commit-author { font-size: 13px; color: #a8b8ce; }
+.status-badge { font-size: 12px; line-height: 1.2; }
+.commit-list .status-badge { font-size: 12px; }
+.commit-list .status-ok { color: var(--green); }
+.commit-list .status-warn { color: var(--amber); }
+.commit-list .status-dot { color: inherit; }
+.commit-list .commit-author { grid-column: 2 / -1; }
+.hash-copy { border: 1px solid #35526a; border-radius: 6px; padding: 7px; background: #122534; cursor: pointer; }
+.hash-copy small { display: block; color: #a7f3d0; }
+.all-projects { margin-bottom: 26px; }
+.project-scroll { max-height: 340px; overflow-y: auto; scrollbar-gutter: stable; }
+.project-row { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1.3fr) minmax(0,.8fr) minmax(0,.7fr); gap: 18px; width: 100%; padding: 15px 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; color: #dbe7f5; font-size: 14px; }
+.project-row:hover, .project-row:focus-visible { background: #142536; outline: 1px solid #7dd3fc; outline-offset: -1px; }
+.project-row span { min-width: 0; overflow-wrap: anywhere; }
+.project-row strong { font-size: 15px; }
+.project-row small { display: block; font-size: 13px; color: #a1b1c5; margin-top: 5px; line-height: 1.5; }
+.metadata-note { font-size: 13px; color: #a1b1c5; line-height: 1.5; }
+.project-detail { border-top: 1px solid #35526a; margin-top: 20px; padding-top: 20px; scroll-margin-top: 88px; }
+.startup-screen { min-height: 100vh; display: grid; place-items: center; padding: 32px; }
+.startup-card { width: min(680px,100%); padding: 36px; }
+.startup-card h1 { font-size: 30px; }
+.startup-card p { color: #a1b1c5; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.startup-stages > div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.startup-stages small { grid-column: 1/-1; font-size: 14px; color: #a1b1c5; }
+@media(max-width:1000px) { .project-row { grid-template-columns: repeat(2,minmax(0,1fr)); } }
