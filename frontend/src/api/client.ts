@@ -6,6 +6,8 @@ export class ApiError extends Error {
 
 export type BackendReadiness = 'STARTING' | 'READY' | 'UNAVAILABLE' | 'PORT_IN_USE'
 export interface DesktopBackendStatus {
+  stages?: Array<{ name: string; state: string; detail: string }>
+  running?: boolean
   state: BackendReadiness
   detail: string
   managed: boolean
@@ -28,6 +30,13 @@ export async function desktopBackendStatus(): Promise<DesktopBackendStatus | nul
 
 const delay = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds))
 
+export async function retryStartup() {
+  if (isTauriRuntime()) {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('desktop_retry_startup')
+  }
+}
+
 export async function waitForBackend(
   attempts = 45,
   intervalMilliseconds = 1000,
@@ -42,9 +51,9 @@ export async function waitForBackend(
         last = desktop
         onStatus?.(desktop)
         if (desktop.state === 'READY') return desktop
-        if (desktop.state === 'PORT_IN_USE') return desktop
+        if (desktop.state === 'PORT_IN_USE' || desktop.state === 'UNAVAILABLE') return desktop
       } else {
-        const response = await fetch(resolveApiUrl('/api/health'), { headers: { Accept: 'application/json' } })
+        const response = await fetch(resolveApiUrl('/api/health'), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(3000) })
         if (response.ok) {
           const body = await response.json() as { status?: string }
           if (body.status === 'UP') return { ...last, state: 'READY', detail: 'LocalRAG Backend ready' }

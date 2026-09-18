@@ -31,7 +31,8 @@
     "active": true,
     "targets": ["nsis"],
     "resources": {
-      "../../build/libs/localrag-backend.jar": "backend/localrag-backend.jar"
+      "../../build/libs/localrag-backend.jar": "backend/localrag-backend.jar",
+      "../../compose.yml": "runtime/compose.yml"
     },
     "icon": [
       "icons/32x32.png",
