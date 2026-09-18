@@ -45,13 +45,17 @@ evaluation. They are not production SLOs.
 
 ## Measured release baseline
 
-Validated on the local Windows host on 2026-09-16:
+Latest validation on the local Windows host on 2026-09-18:
 
-- Backend: 174 tests across 65 suites, zero failures/errors, one opt-in live test skipped.
-- Frontend: 11 tests across 7 files, all passing; Rust Desktop lifecycle/security: 2 tests.
-- Vite production build: 52 modules; JS 275.55 kB / gzip 83.54 kB;
-  CSS 22.23 kB / gzip 5.49 kB.
-- Tauri production artifacts: 11.49 MB executable and 62.46 MB unsigned NSIS installer.
+- Backend: 180 tests across 67 suites, zero failures/errors, one opt-in live test skipped.
+- Frontend: 13 tests across 8 files; Rust startup/lifecycle/security: 10 tests.
+- Vite production build: 55 modules; JS 281.24 kB / gzip 85.11 kB;
+  CSS 24.69 kB / gzip 5.99 kB.
+- Tauri production executable and unsigned NSIS installer regenerated.
+- Whole-workspace metadata: 13 Projects in 2,680 ms, four bulk DB queries, no LLM.
+- Production cold start passed after external Docker socket recovery; all runtime stages were
+  started by the exe. The initial post-reboot attempt failed in Docker itself, not in LocalRAG.
+- Latest RAG: SUCCESS, 5 Sources, 17.7 s. Agent: SUCCESS, getGitStatus, 28.6 s LLM.
 - Actual production WebView smoke: 13 Projects rendered; `Local_Ai_Work` Dashboard available;
   RAG SUCCESS with 5 Sources; Agent used `getGitStatus`; Error History and Progress rendered;
   Automation Run Now returned SUCCESS with LLM skipped.
@@ -68,8 +72,12 @@ Validated on the local Windows host on 2026-09-16:
 
 - Vector-only ranking still allows documentation, tests or migrations to outrank implementation.
 - Model latency and output quality vary; verified state never depends solely on prose quality.
-- Agent Git final response capture remains PARTIAL because the external execution harness lost
-  the returned JSON twice after the server request completed.
+- The earlier Agent capture limitation was resolved: the latest production UI smoke captured
+  both the answer and getGitStatus trace without another quality tuning cycle.
+- Docker Desktop can fail after reboot on stale AF_UNIX sockets. Recovery required an explicit,
+  separate maintenance approval; it is not hidden in the app startup logic. The application
+  reports timeout/failure and offers Retry. Unconditional post-reboot one-click remains blocked
+  by this external issue.
 - Desktop requires external Java 17. A Tauri-started Backend is left running for safe reuse when
   the Window closes because no unauthenticated shutdown endpoint or forced kill was added.
 - Native notifications, Hybrid Search, reranking, streaming and cloud deployment are not part of

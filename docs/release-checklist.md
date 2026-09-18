@@ -48,7 +48,24 @@ Validated on 2026-09-16.
 | Code signing | DEFERRED | SmartScreen warning remains possible |
 | Push | NOT_DONE | explicit approval required |
 
-## Launcher scenario coverage
+## One-click Desktop follow-up — 2026-09-18
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Native startup | PASS after external recovery | Docker/PostgreSQL/Ollama/models/bundled Java 17 Backend all READY |
+| Post-reboot guarantee | BLOCKED externally | Docker stale AF_UNIX sockets recurred; no automatic repair/reset |
+| Timeout and Retry | PASS | actual Docker failure screen, deterministic scenarios, unchanged Backend PID on Retry |
+| Project overview | PASS | 13 Projects; single frontend summary request; four bulk DB queries |
+| Git | PASS | configured upstream, PUSHED/UNPUSHED, clean/dirty, ahead/behind and no-upstream |
+| Visual | PASS | actual production WebView 1440×1000; inner scroll; no positive horizontal overflow/console errors |
+| RAG / Agent | PASS | one real query each; 5 Sources / getGitStatus |
+| Backend | PASS | 180 tests, zero failures/errors, one live skip |
+| Frontend / Rust | PASS | 13 / 10 tests |
+| Artifacts | PASS | production executable and unsigned NSIS installer generated |
+| Installer installation | NOT_TESTED | build verified only |
+| Push | NOT_DONE | separate approval required |
+
+### Earlier launcher scenario coverage
 
 - A running services: actual repeat execution reused every component.
 - B Docker stopped: deterministic startup branch and `DOCKER_NOT_RUNNING` timeout are tested;

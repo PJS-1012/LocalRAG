@@ -26,8 +26,8 @@ Tauri Desktop Window
 The React application is a thin Project-scoped client. `App.tsx` owns navigation, Project
 selection, discovery, and overview loading. Page components own feature inputs and result
 presentation; API modules own HTTP contracts and normalize server errors. Although legacy
-discovery responses contain root metadata, the UI neither renders it nor accepts absolute-path
-input. No client state library or duplicate business rules were added.
+discovery responses contain root metadata, only the read-only Project detail displays the root.
+The UI never accepts an absolute-path input. No client state library was added.
 
 The nine screens are Dashboard, RAG, Agent, Errors, Progress, Activity, Automation,
 Notifications, and Settings. The Settings screen exposes availability only, never credentials
@@ -38,19 +38,29 @@ DELETE and responses above 10 MB are rejected.
 
 ## Desktop process boundary
 
-The Desktop executable checks both `/api/health` and Workspace discovery before reusing port
-18080. If the port is free, it starts only the bundled `backend/localrag-backend.jar` with the
-external Java 17 runtime and fixed loopback address/port arguments. It redirects stdout/stderr to
-the Tauri application log directory, records the child PID, and polls readiness for at most 60
-seconds. A non-LocalRAG listener becomes `PORT_IN_USE`; it is never terminated.
+The Window opens first. A native worker sequentially prepares Docker (180 s), PostgreSQL (90 s),
+Ollama (60 s), required models (5 s), and Backend (90 s). Each probe/command has its own timeout;
+a stage deadline can exceed its budget by at most the in-flight bounded command. The frontend
+polls for at most 510 attempts and displays every stage, failure reason, and Retry Startup.
+Retries are serialized; already-running services are reused.
 
-The React shell independently exposes `STARTING`, `READY`, `UNAVAILABLE`, and `PORT_IN_USE` and
-uses a 45-second bounded retry. The app opens before Docker, Ollama, or PostgreSQL availability is
-known. Those integrations remain backend status data and do not control whether the Window exists.
+Docker uses the installed fixed CLI and the local desktop Linux named pipe. Only the
+`local-ai-postgres` container with Compose labels `local_ai_work/postgres` may be started.
+When missing, the bundled repository compose file starts only `postgres` with no dependencies
+or image pull. The existing Compose project/volume name is preserved. Unhealthy or foreign
+containers fail explicitly. Ollama uses its known installation path and `serve`; model tags are
+checked exactly, never downloaded.
 
-The current release intentionally does not call `Child::kill` or terminate another Java process.
-Dropping the Desktop Window therefore leaves a Tauri-started Backend running for safe reuse. A
-token-protected graceful shutdown channel is a future improvement, not an exposed actuator today.
+The Backend health includes `application=localrag`; compatibility with older LocalRAG instances
+also checks Workspace discovery. A free 18080 port starts only the bundled JAR with Java 17.
+Tauri verbatim Windows resource paths are normalized for Java's JAR launcher. All child consoles
+are hidden and output goes to the app log directory. Existing listeners/processes are never killed.
+Timeout cleanup terminates only the orchestrator's own short-lived CLI probe, not a service.
+Closing the app leaves shared runtimes available for reuse.
+
+The API bridge runs blocking I/O off the UI thread, disables redirects/proxies, and only targets
+the fixed loopback Backend. Startup has no arbitrary command/path input and is not exposed as
+an Agent tool. Docker OS/socket recovery is an external maintenance action, never automatic.
 
 ## Backend overview boundary
 
@@ -62,6 +72,16 @@ prevent the dashboard from rendering.
 
 The overview endpoint does not execute mutation tools, index Projects, start services, or
 invoke an LLM. Feature pages continue to call their existing Project-scoped APIs directly.
+
+`GET /api/workspaces/overview` discovers Projects once, uses four bulk metadata queries
+(index counts, error counts, notification counts, automation config), and reads bounded Git
+metadata per repository. It does not return document contents or embeddings. The frontend
+uses one request for the entire scrollable list; opening detail requires no further request.
+Failures are represented by unknown values/warnings rather than fabricated zero counts.
+
+Git push badges use ancestry against the configured upstream SHA; divergence uses that same
+locally cached ref. No upstream, missing ref and command failures remain distinct from pushed
+or unpushed. No network fetch occurs, so this is not a live remote-server assertion.
 
 ## Data and AI paths
 
@@ -89,7 +109,7 @@ search. Release hardening does not change prompts, chunking, ranking, or model s
 
 ## Development startup boundary
 
-`dev-start.ps1` is the only startup mutation boundary. It checks Docker readiness, starts only
+`dev-start.ps1` remains a developer-only startup boundary. It checks Docker readiness, starts only
 the fixed `postgres` Compose service when needed, checks or starts the fixed Ollama executable,
 and then starts Spring Boot on port 18080 and Vite on port 5173. It reuses identified LocalRAG
 listeners and reports an occupied port without terminating its owner. Runtime logs and listener
@@ -97,7 +117,7 @@ PIDs live under the ignored `.localrag/` directory.
 
 The Launcher never removes a container or volume, pulls a model, stops a process, or exposes
 these operations through Agent Tools. The Tauri wrapper also has no shell or filesystem
-permission. Its only native command boundaries are Backend lifecycle status and the validated
+permission. Its native boundaries are fixed startup orchestration/status/retry and the validated
 loopback API bridge.
 
 ## Desktop release deployment
@@ -105,4 +125,5 @@ loopback API bridge.
 `npm run desktop:build` first creates the fixed Spring Boot executable JAR and Vite production
 assets, then builds a Windows x64 executable and unsigned NSIS installer. The JAR is a read-only
 bundle resource. The release depends on an external Java 17 installation; a custom jlink runtime,
-code signing, auto-update, and Docker/Ollama control are intentionally outside Phase 12.
+code signing and auto-update remain deferred. Fixed Docker/Ollama startup is now handled by
+the Desktop orchestrator; installation and general service management remain outside its scope.

@@ -30,46 +30,36 @@ Project -> Progress / Activity -> change-aware Automation
 - React/Vite 기반 9개 화면의 Local Developer Dashboard
 - Tauri 2 기반 Windows Desktop Window와 NSIS installer
 
-## Quick Start — Windows
+## Quick Start — Windows Desktop
 
-필수 환경은 Java 17, Node.js/npm, Docker Desktop, Ollama입니다. 다음 모델은 설치되어 있어야
-하며 Launcher가 자동으로 다운로드하지 않습니다.
+1. **LocalRAG 실행**
 
-- `qwen3:8b`
-- `qwen3-embedding:0.6b`
+설치된 LocalRAG를 실행하면 Startup 화면이 즉시 열립니다. Docker Desktop → LocalRAG
+PostgreSQL → Ollama → 필수 모델 → Backend를 확인하고, 필요한 서비스만 백그라운드에서
+시작합니다. 모두 READY가 되면 Dashboard로 이동합니다. 실패 시 같은 창의 **Retry Startup**을
+사용합니다. 매번 PowerShell, Docker UI, Ollama 터미널 또는 브라우저를 열 필요가 없습니다.
 
-프로젝트 루트에서 한 번 실행합니다.
+이미 설치되어 있어야 하는 환경은 Docker Desktop, Java 17, Ollama와
+`qwen3:8b` / `qwen3-embedding:0.6b`입니다. Java 17은 JAVA_HOME 또는 PATH에서 찾습니다.
+WebView2와 PostgreSQL용 pgvector/pgvector:0.8.6-pg17 이미지도 필요합니다.
+Desktop은 설치·모델 다운로드·OS 설정 변경을 자동 수행하지 않습니다.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\dev-start.ps1
-```
+- 실행 파일: `frontend/src-tauri/target/release/localrag-desktop.exe`
+- Installer: `frontend/src-tauri/target/release/bundle/nsis/LocalRAG_0.1.0_x64-setup.exe`
+- 직접 exe를 실행할 때에는 옆의 backend/, runtime/ resource 폴더도 함께 유지합니다.
+- Startup 실패·모델 누락·18080 port 충돌은 앱 안에 표시됩니다.
+- 로그: `%LOCALAPPDATA%/com.localai.localrag/logs/`
+- 앱을 닫아도 공유 runtime은 종료하지 않으며 다음 실행에서 재사용합니다.
 
-Launcher는 Docker Engine을 확인하고, LocalRAG의 `postgres` Compose service만 시작한 뒤
-Ollama, Spring Boot Backend, Vite Frontend를 순서대로 준비합니다. 기존 LocalRAG 인스턴스는
-재사용하고, 다른 프로세스가 18080/5173 포트를 사용하면 종료하지 않고 `PORT_IN_USE`로
-실패합니다. 로그와 PID 상태는 Git에서 제외된 `.localrag/`에 기록됩니다.
+Dashboard의 All projects에서 전체 Project 상태와 상세 정보를 확인할 수 있습니다.
+CLEAN/DIRTY는 파일 변경 여부이며, PUSHED/UNPUSHED와 ahead/behind는 설정된 upstream의
+**로컬 참조 기준**입니다. 자동 fetch는 하지 않으므로 원격 서버 최신 상태를 보장하지 않습니다.
+상세를 열거나 메타데이터를 갱신하는 동작은 LLM을 호출하지 않습니다.
 
-준비가 끝나면 `http://localhost:5173`을 엽니다. 브라우저를 열지 않으려면:
+## Developer setup
 
-```powershell
-.\dev-start.ps1 -NoBrowser
-```
-
-Launcher는 컨테이너/volume 삭제, 모델 pull, 기존 프로세스 강제 종료를 수행하지 않습니다.
-
-## Desktop — Windows
-
-Desktop build도 기존 React UI와 Spring Boot Backend를 그대로 사용합니다. 설치 후
-`LocalRAG`를 실행하면 독립 Window가 열리고, port 18080에서 식별된 LocalRAG Backend를
-재사용하거나 bundle resource의 고정 `localrag-backend.jar`를 Java 17로 시작합니다.
-
-필수 환경:
-
-- Java 17이 `PATH`에서 실행 가능
-- Docker Desktop과 LocalRAG PostgreSQL/pgvector (DB 기능 사용 시)
-- Ollama와 `qwen3:8b`, `qwen3-embedding:0.6b` (AI 기능 사용 시)
-
-개발 및 installer build:
+소스 개발에는 Node.js/npm이 추가로 필요하며 Desktop build에는 Rust/MSVC C++ build tools가
+필요합니다.
 
 ```powershell
 cd frontend
@@ -77,22 +67,18 @@ npm run desktop:dev
 npm run desktop:build
 ```
 
-생성 위치:
+웹 개발용 수동 실행은 프로젝트 루트의 dev-start.ps1을 사용합니다.
+이 스크립트는 Backend와 Vite 개발 서버를 준비하고 브라우저를 엽니다.
 
-- 실행 파일: `frontend/src-tauri/target/release/localrag-desktop.exe`
-- NSIS installer: `frontend/src-tauri/target/release/bundle/nsis/LocalRAG_0.1.0_x64-setup.exe`
+```powershell
+.\dev-start.ps1
+# 브라우저를 열지 않는 개발 실행
+.\dev-start.ps1 -NoBrowser
+```
 
-Desktop은 Docker/Ollama를 범용 제어하지 않습니다. 해당 서비스가 꺼져 있어도 Window는
-유지되고 Backend 및 Settings의 상태 표시를 통해 장애 범위를 확인합니다. Backend가
-없거나 시작되지 않으면 `STARTING` 후 bounded timeout을 거쳐 `UNAVAILABLE`을 표시하며,
-다른 프로세스가 18080을 사용하면 종료하지 않고 `PORT_IN_USE`로 표시합니다.
-
-문제 해결:
-
-- Backend unavailable: Java 17과 Desktop Backend log를 확인합니다.
-- Docker/DB unavailable: Docker Desktop과 `local-ai-postgres` container를 확인합니다.
-- Ollama unavailable/model missing: Ollama와 위 두 모델 설치 상태를 확인합니다.
-- Port 18080 in use: 점유 프로세스를 자동 종료하지 않으므로 사용자가 충돌을 해소해야 합니다.
+Desktop runtime 제어는 고정 실행 파일과 고정 Compose service만 사용합니다.
+Container/volume 삭제, 다른 Project container 변경, 모델 pull, 기존 Java/Ollama 강제 종료는
+하지 않습니다. Docker 자체의 OS/소켓 오류는 실패로 보고하며 자동 초기화하지 않습니다.
 
 ## Architecture
 
@@ -132,16 +118,17 @@ Tauri Desktop -> React/Vite UI
 
 ## Measured Release Baseline
 
-2026-09-16 로컬 Windows 환경 기준입니다. 캐시, 모델 warm-up과 시스템 부하에 따라 달라집니다.
+2026-09-18 로컬 Windows 환경 기준입니다. 캐시, 모델 warm-up과 시스템 부하에 따라 달라집니다.
 
-- Backend: 174 tests, 실패 0, opt-in live test 1개 skip
-- Frontend: 11 tests / 7 files, 실패 0
-- Production bundle: JS 275.55 kB (gzip 83.54 kB), CSS 22.23 kB (gzip 5.49 kB)
-- Desktop: 11.49 MB exe, 62.46 MB unsigned NSIS installer
-- 실제 RAG: SUCCESS, Source 5개 / 사용 3개 / invalid citation 0, 17.56초
-- 실제 Progress: SUCCESS, LLM 21.57초 / total 25.51초
-- LLM 비활성 Automation Run Now: 374 ms
-- Chrome 1440px 실제 렌더링: 9개 화면, Similar 탭, console 오류 및 가로 overflow 0
+- Backend: 180 tests / 67 suites, 실패 0, opt-in live test 1개 skip
+- Frontend: 13 tests / 8 files, 실패 0; Rust: 10 tests 통과
+- Production bundle: JS 281.24 kB (gzip 85.11 kB), CSS 24.69 kB (gzip 5.99 kB)
+- Desktop: Windows x64 exe 및 unsigned NSIS installer 생성
+- 실제 RAG: SUCCESS, Source 5개, 17.7초
+- 실제 Agent: SUCCESS, getGitStatus, LLM 28.6초
+- Workspace summary: 13 Projects, 2,680 ms; Local_Ai_Work 151 documents / 259 chunks
+- Production WebView 1440×1000: Project list/detail, 내부 scroll, console 오류 및 가로 overflow 0
+- One-click: Docker 소켓 환경 복구 후 모든 runtime 미실행 상태에서 자동 시작 PASS
 
 상세 수치는 [Portfolio Highlights](docs/portfolio-highlights.md)에 있습니다.
 
@@ -177,13 +164,17 @@ Launcher의 상태 전이와 금지 명령 검사는 다음으로 실행합니�
 
 - Vector-only retrieval이라 migration/문서가 구현 코드보다 높게 노출되는 ranking 사례가 있습니다.
 - 실제 qwen 응답은 환경에 따라 약 15–50초가 걸릴 수 있습니다.
-- 최종 Agent Git 재확인 요청은 완료됐지만 실행 도구가 응답 JSON을 반환하지 않아 PARTIAL입니다.
+- 2026-09-18 production UI에서 Agent Git 답변과 Tool trace를 모두 확인했습니다.
 - UI와 Tauri Window의 최소 width는 720px입니다.
 - Desktop은 외부 Java 17 설치를 요구하며 jlink runtime bundle은 deferred입니다.
 - 앱이 시작한 Backend는 PID를 추적하지만 앱 종료 시 강제 종료하지 않습니다. 현재 release는
   안전한 graceful shutdown endpoint를 추가하지 않고 실행 중 Backend를 다음 실행에서 재사용합니다.
 - installer는 code signing하지 않아 Windows SmartScreen 경고가 표시될 수 있습니다.
-- Docker/Ollama/PostgreSQL 자동 시작 버튼은 packaging 핵심 범위 밖으로 deferred했습니다.
+- 현재 Docker Desktop은 재부팅 후 오래된 AF_UNIX 소켓 접근 오류가 재발할 수 있습니다.
+  이 경우 Startup 실패/Retry가 표시됩니다. 이번 검증에서는 별도 승인 아래 소켓 폴더만
+  백업해 복구했으며, 컨테이너/volume은 삭제하지 않았습니다. 무조건적인 재부팅 후
+  one-click 성공은 이 Docker 외부 문제 해결 전까지 보장하지 않습니다.
+- Docker CLI는 background start를 요청하지만 Docker 자체 Dashboard/오류창이 나타날 수 있습니다.
 - Vitest toolchain에 moderate 개발 의존성 advisory 2건이 있으며 수정에는 major upgrade가 필요합니다.
 - Launcher는 시작/재사용만 담당하며 서비스 종료 명령은 제공하지 않습니다.
 
