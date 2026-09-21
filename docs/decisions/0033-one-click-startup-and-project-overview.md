@@ -105,3 +105,46 @@ Docker fix is still needed to guarantee repeatable post-reboot startup without m
 Docker socket recurrence and possible Docker UI visibility are external limitations, not hidden
 successes. Existing shared services remain running after app close. Unsigned installer may
 trigger SmartScreen. No push was performed; implementation and docs are committed separately.
+
+## Follow-up verification — 2026-09-21
+
+Scope: production Docker auto-start verification only, no application/UI/RAG changes.
+Docker Desktop 4.79.0 was stopped with its official CLI; no LocalRAG, Backend or Docker
+process remained and the Engine pipe was absent. PostgreSQL already existed and was stopped.
+The operator never started Docker manually during either attempt.
+
+- First exe launch: 15:31:32 KST; Window detected after 121 ms. LocalRAG launched Docker,
+  but at 15:31:34 Docker logged `initializing Secrets Engine` / `engine.sock` /
+  `The file cannot be accessed by the system`. Engine readiness never succeeded.
+- LocalRAG reported Docker FAILED / UNAVAILABLE at 15:34:39 (about 186 s after the first
+  sampled STARTING state). Downstream stages remained WAITING. This is a Docker internal
+  stale-runtime failure (B/C); timeout (E) is its consequence, not evidence of a short budget.
+  No independent LocalRAG orchestration defect or permission denial was established.
+- Docker's graceful stop failed in this crashed state. Only Docker processes created during
+  this test were terminated after executable-path/start-time checks. Socket-only directories
+  were renamed to `Docker/run.localrag-verification-20260921-1535` and
+  `docker-secrets-engine.localrag-verification-20260921-1535` under LOCALAPPDATA.
+  Both original runtime directories were verified empty. No container, volume, Docker data
+  directory, setting or application code was deleted/changed.
+- Second exe-only launch: 15:36:44 KST; Window detected after 126 ms; all stages READY at
+  15:37:24 (about 40 s). Docker, PostgreSQL, Ollama and Backend were automatically started;
+  both preinstalled models were confirmed. Backend PID 24248, health UP. Dashboard rendered
+  13 Projects with zero observed console errors.
+- PostgreSQL container ID remained
+  `6ee48dc093b20644fd3c8703b709cafe5876a14284fcf01565bc2b48a616ac8c`;
+  volume remained `local_ai_work_local_ai_postgres_data`; all eight volume names were retained.
+  Other previously running services returned through Docker's own restart policies.
+- Recovered run: DOCKER_AUTO_START=PASS, ONE_CLICK_STARTUP=PASS. Original unrepaired run:
+  FAIL. This does not establish a permanent fix or guaranteed post-reboot success.
+
+Do not auto-rename Docker internals merely because no process is visible, Engine is unreachable
+and a socket exists. Healthy sockets have the same filesystem attributes; stale detection needs
+fresh matching failure evidence and remains vulnerable to a concurrent Docker launch. Keep
+explicit maintenance separate from startup. Existing FAILED/Retry behavior remains unchanged;
+the generic readiness error does not yet expose a dedicated stale-socket diagnostic code.
+
+Evidence: Docker host backend log; ignored `build/desktop-qa/startup-failed-20260921.json`,
+`startup-failed-20260921.png`, `startup-recovered-20260921.json`, `dashboard.json` and
+`dashboard.png`. Native Computer Use initialization failed twice; the existing production
+WebView observer was used instead. Only two cold-start attempts were made; no model quality
+evaluation or full test-suite rerun was needed because application code was not changed.

@@ -8,8 +8,9 @@ LocalRAG는 PC 전체를 무작정 AI에 넣지 않고, 등록된 Workspace 안�
 
 로컬 개발 환경의 지식은 코드, 문서, Git, 컨테이너, 로그와 오류 이력에 흩어져 있습니다.
 LocalRAG는 이 정보를 Project 경계 안에서 연결하되, 민감 파일 차단과 실패 격리,
-읽기 전용 Tool 정책을 먼저 적용합니다. 검색 결과가 없으면 LLM을 호출하지 않고
-`NO_EVIDENCE`를 반환합니다.
+읽기 전용 Tool 정책을 먼저 적용합니다. 기존 RAG 전용 API는 검색 결과가 없으면
+`NO_EVIDENCE`를 반환합니다. 메인 채팅은 Git/작업 이력/안전한 실제 파일 등 다른 근거도
+사용하므로, Vector Search 0건만으로 모든 질문을 중단하지 않습니다.
 
 ```text
 File / Code -> Document -> Chunk -> Embedding -> pgvector -> cited RAG
@@ -27,7 +28,8 @@ Project -> Progress / Activity -> change-aware Automation
 - Git/Docker/DB/Ollama/Log 기반 read-only Multi-Tool Agent
 - Error History, Verification Audit, Similar Error vector retrieval
 - Progress, Recent Activity, change-aware Automation과 Notification Candidates
-- React/Vite 기반 9개 화면의 Local Developer Dashboard
+- 하나의 채팅에서 기존 Tool을 선택하는 Unified Chat와 실제 파일 기반 온보딩
+- React/Vite 기반 한국어 중심 10개 화면, Project 언어·Git 작업/원격 상태 분리
 - Tauri 2 기반 Windows Desktop Window와 NSIS installer
 
 ## Quick Start — Windows Desktop
@@ -36,7 +38,7 @@ Project -> Progress / Activity -> change-aware Automation
 
 설치된 LocalRAG를 실행하면 Startup 화면이 즉시 열립니다. Docker Desktop → LocalRAG
 PostgreSQL → Ollama → 필수 모델 → Backend를 확인하고, 필요한 서비스만 백그라운드에서
-시작합니다. 모두 READY가 되면 Dashboard로 이동합니다. 실패 시 같은 창의 **Retry Startup**을
+시작합니다. 모두 READY(준비 완료)가 되면 대시보드로 이동합니다. 실패 시 같은 창의 **다시 준비**를
 사용합니다. 매번 PowerShell, Docker UI, Ollama 터미널 또는 브라우저를 열 필요가 없습니다.
 
 이미 설치되어 있어야 하는 환경은 Docker Desktop, Java 17, Ollama와
@@ -51,10 +53,29 @@ Desktop은 설치·모델 다운로드·OS 설정 변경을 자동 수행하지 
 - 로그: `%LOCALAPPDATA%/com.localai.localrag/logs/`
 - 앱을 닫아도 공유 runtime은 종료하지 않으며 다음 실행에서 재사용합니다.
 
-Dashboard의 All projects에서 전체 Project 상태와 상세 정보를 확인할 수 있습니다.
+대시보드의 전체 프로젝트 목록에서 상태와 상세 정보를 확인할 수 있습니다.
 CLEAN/DIRTY는 파일 변경 여부이며, PUSHED/UNPUSHED와 ahead/behind는 설정된 upstream의
 **로컬 참조 기준**입니다. 자동 fetch는 하지 않으므로 원격 서버 최신 상태를 보장하지 않습니다.
 상세를 열거나 메타데이터를 갱신하는 동작은 LLM을 호출하지 않습니다.
+
+## 채팅 사용과 현재 한계
+
+프로젝트 선택 후 **채팅**에서 목적, 처음 볼 파일, Git 상태, 진행 상태, 최근 작업을 질문합니다.
+기능별 화면을 먼저 고를 필요는 없습니다. **Enter 전송 / Shift+Enter 줄바꿈**을 지원합니다.
+이전 RAG와 Agent 화면은 고급 기능의 지식 검색 상세 / 에이전트 상세에 유지합니다.
+이 채팅은 단일 질문 단위이며 이전 대화 기억은 제공하지 않습니다.
+
+답변 옆에서 파일 경로·행·citation과 실제 Tool 실행 근거를 확인할 수 있습니다.
+인덱스가 없거나 관련 검색 결과가 없어도 안전한 README/build/code 샘플로 설명할 수 있지만,
+이는 전체 Project의 구현 완료나 테스트 통과를 증명하지 않습니다.
+
+주요 언어 비율은 제외 정책을 통과한 **소스 파일 수** 기준이며 코드 줄 수 비율이 아닙니다.
+Metadata는 기본 5분 cache를 사용합니다. 상세를 여는 동작에는 추가 Project API 요청이 없습니다.
+
+실제 15개 질문 평가: **PASS 4 / PARTIAL 10 / FAIL 1**. 현재 일부 답변은 citation을
+누락하거나, 기록되지 않은 미완료 작업을 없다고 단정합니다. 기능 연결은 완료했지만 답변 품질의
+완전한 종료를 선언하지 않습니다. 상세 결과는 [평가 보고서](docs/unified-chat-evaluation.md),
+설계는 [Decision Log 0034](docs/decisions/0034-unified-chat-onboarding-korean-ux.md)에 기록했습니다.
 
 ## Developer setup
 

@@ -105,6 +105,39 @@ try {
     await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent.includes('Dashboard')).click()")
     await delay(300)
     await evaluate("window.scrollTo(0,0)")
+
+  } else if (mode === 'unified-ui') {
+    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent.includes('대시보드')).click()")
+    for(let i=0;i<60;i++){if(await evaluate("document.querySelectorAll('.project-row').length>0"))break;await delay(500)}
+    const dashboard=await evaluate("({projects:document.querySelectorAll('.project-row').length,overflow:document.documentElement.scrollWidth-innerWidth,languages:[...document.querySelectorAll('.language-info')].map(e=>e.innerText),metadataFont:getComputedStyle(document.querySelector('.project-row small')).fontSize,statusFont:getComputedStyle(document.querySelector('.status-badge')).fontFamily})")
+    await screenshot('unified-dashboard')
+    const beforeDetail=await evaluate("performance.getEntriesByType('resource').length")
+    await evaluate("[...document.querySelectorAll('.project-row')].find(b=>b.querySelector('strong')?.textContent==='RoomReservation').click()")
+    await delay(400)
+    const detail=await evaluate("({text:document.querySelector('.project-detail')?.innerText,requests:performance.getEntriesByType('resource').length,overflow:document.documentElement.scrollWidth-innerWidth})")
+    await screenshot('unified-project-detail')
+    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent.includes('설정')).click()")
+    await delay(300);await screenshot('unified-settings')
+    const settings=await evaluate("document.querySelector('.settings-grid')?.innerText")
+    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent.trim().endsWith('채팅')).click()")
+    await delay(300);await screenshot('unified-chat')
+    const chat=await evaluate("({title:document.querySelector('h1')?.innerText,composer:!!document.querySelector('textarea[aria-label=\"채팅 질문\"]'),overflow:document.documentElement.scrollWidth-innerWidth})")
+    const result={dashboard,detail:{...detail,additionalRequests:detail.requests-beforeDetail},settings,chat,errors}
+    await writeFile(resolve(output,'unified-ui.json'),JSON.stringify(result,null,2))
+    console.log(JSON.stringify(result))
+    if(dashboard.projects!==13||dashboard.overflow>0||!chat.composer||chat.overflow>0||result.detail.additionalRequests!==0||errors.length)throw new Error('Unified UI check failed')
+  } else if (mode === 'unified-enter') {
+    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent.trim().endsWith('채팅')).click()")
+    await evaluate("(()=>{const t=document.querySelector('textarea[aria-label=\"채팅 질문\"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'현재 Git 상태 알려줘');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus()})()")
+    await delay(200)
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13})
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13})
+    for(let i=0;i<120;i++){if(await evaluate("!!document.querySelector('.message-assistant')"))break;await delay(1000)}
+    const result=await evaluate("({answer:document.querySelector('.message-assistant')?.innerText,trace:document.querySelector('.sources-panel')?.innerText,overflow:document.documentElement.scrollWidth-innerWidth})")
+    await screenshot('unified-enter')
+    await writeFile(resolve(output,'unified-enter.json'),JSON.stringify({...result,errors},null,2))
+    console.log(JSON.stringify(result))
+    if(!result.answer||!result.trace.includes('getGitStatus')||result.overflow>0||errors.length)throw new Error('Unified Enter smoke failed')
   } else if (mode === 'retry') {
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Retry Startup').click()")
     await delay(1000)

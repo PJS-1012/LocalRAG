@@ -1,5 +1,26 @@
 # Phase 10 Portfolio Metrics
 
+## Follow-up: Unified UX — 2026-09-22
+
+The original Phase 10 measurements below remain historical. Current implementation has
+10 routes, one primary Unified Chat, Korean Project metadata and file-count language summaries.
+Validation: backend 190 tests (189 pass, 1 opt-in skip), frontend 26 pass, Rust 10 pass,
+Vite/Tauri/NSIS builds pass. Production WebView verified 13 Projects, detail expansion with
+zero extra requests, Enter submission and zero console errors.
+
+13-Project overview: cold 11.183 s / warm 3.128 s client wall time. Cache TTL is five minutes;
+no content scan or LLM is used for language statistics. Average of 15 real questions:
+24.817 s total = 0.850 s Tool work + 23.968 s LLM time (rounding applies).
+
+Quality is **4 PASS / 10 PARTIAL / 1 FAIL**, not the 15/15 HTTP success rate.
+Seven answers omit knowledge citations; some incorrectly treat missing work records as no
+unfinished work. This is a portfolio example of evidence availability versus answer groundedness,
+not evidence of production-ready answer quality.
+See [full evaluation](unified-chat-evaluation.md) and
+[Decision Log 0034](decisions/0034-unified-chat-onboarding-korean-ux.md).
+
+## Original Phase 10 baseline
+
 Measured on the local Windows development machine on 2026-09-15. These values are regression
 and portfolio baselines, not production SLOs; filesystem cache, model warm-up, Docker state,
 and machine load affect timings.

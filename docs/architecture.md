@@ -29,8 +29,9 @@ presentation; API modules own HTTP contracts and normalize server errors. Althou
 discovery responses contain root metadata, only the read-only Project detail displays the root.
 The UI never accepts an absolute-path input. No client state library was added.
 
-The nine screens are Dashboard, RAG, Agent, Errors, Progress, Activity, Automation,
-Notifications, and Settings. The Settings screen exposes availability only, never credentials
+The ten screens are Dashboard, Unified Chat, legacy RAG, legacy Agent, Errors, Progress,
+Activity, Automation, Notifications, and Settings. Unified Chat is the primary entry; legacy
+RAG and Agent are advanced views. The Settings screen exposes availability only, never credentials
 or arbitrary filesystem controls. Vite proxies `/api` to port 18080 in browser development.
 In production Tauri, the client invokes one Rust command that accepts only `/api/**`, only
 GET/POST/PUT/PATCH, and always targets `127.0.0.1:18080`. External URLs, traversal, backslashes,
@@ -97,7 +98,47 @@ Project evidence -> progress/activity -> automation run -> notification candidat
 ```
 
 Retrieval remains Top-K 5, threshold 0.45, Query Instruction enabled, vector-only sequential
-search. Release hardening does not change prompts, chunking, ranking, or model settings.
+search. Unified Chat adds its own orchestration policy and bounded live evidence; legacy RAG
+prompt, chunking, ranking and models remain unchanged.
+
+## Unified conversation and onboarding
+
+```text
+POST /api/workspaces/projects/chat/unified (Project-relative ID)
+  -> existing qwen3 Tool Calling, no separate router call
+     -> existing Knowledge / Git / environment / workflow callbacks
+        -> Knowledge: existing RAG + safe ProjectBrief samples + overview facts
+        -> Progress / Activity: existing collectors, without nested summary LLM
+        -> Diagnosis: reuse ErrorAnalysis validation on collected evidence
+  -> bounded sanitized evidence / Tool trace / citations
+  -> answer + warnings (or explicit insufficient evidence)
+```
+
+No exact-query intent rules or new Tool names are added. The source-file selector may match
+an explicitly named identifier to an existing file, but it does not choose the conversational
+route. Generic questions use the model's GENERAL contract without Tools. Unverified Project
+drafts with no Tool are discarded and retried once; a second invalid draft is withheld.
+No-tool failures are labeled UNRESOLVED, not GENERAL. This is a bounded safeguard, not
+independent semantic hallucination verification.
+
+Unified invocation uses thinking OFF, maximum 1,200 output tokens, at most 6 callback attempts
+and 2 Knowledge calls. Duplicate arguments reuse results. The legacy Agent generation path
+is retained. Progress/Activity avoid intermediate summary generations in the Unified path.
+
+ProjectBrief reads at most 8 policy-approved files, 1,400 characters per excerpt and 6,000
+characters overall; paths and line references are retained. The reader rechecks all access
+policies even for cached candidates. No automatic indexing or mutation occurs.
+
+Project language ratios reuse metadata scanning, exclude generated/sensitive/oversized files,
+and count known source extensions rather than lines. A bounded 64-entry, 5-minute cache
+avoids scanning on every Dashboard load. A single Workspace overview includes all Project
+rows and details; expanding a row performs no further API call. Git and DB collection still
+cost time on cache hits.
+
+The UI distinguishes file/Project evidence, runtime observations and workflow history.
+Citation validation checks IDs, not claim-level semantics. The real evaluation found omitted
+citations and unsupported completion claims; see [evaluation](unified-chat-evaluation.md)
+and [decision](decisions/0034-unified-chat-onboarding-korean-ux.md).
 
 ## Failure isolation and security
 
