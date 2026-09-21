@@ -14,6 +14,10 @@ final class ProjectKnowledgeAgentTools {
     private final RagContextAssemblyService contexts;
     private final LogSecretRedactor redactor;
     private int searches;
+    private com.localai.workspace.overview.ProjectBriefService briefs;
+    ProjectKnowledgeAgentTools withBriefs(com.localai.workspace.overview.ProjectBriefService briefs) {
+        this.briefs=briefs; return this;
+    }
 
     ProjectKnowledgeAgentTools(String projectId, RagContextAssemblyService contexts, LogSecretRedactor redactor) {
         this.projectId = projectId;
@@ -29,6 +33,12 @@ final class ProjectKnowledgeAgentTools {
             @ToolParam(description = "Concise project implementation question, in the user's language") String query) {
         if (query == null || query.isBlank() || query.length() > 2000) {
             return new KnowledgeResult("INVALID_REQUEST", projectId, List.of(), "Query must be 1-2000 characters");
+        }
+        if(briefs!=null) {
+            com.localai.workspace.rag.RagContextAssemblyResult context=null;
+            try { context=contexts.assemble(new RagContextPreviewRequest(projectId,query)); }
+            catch(RuntimeException ignored) { /* bounded live evidence can still be available */ }
+            return unifiedKnowledge(query,context);
         }
         var context = contexts.assemble(new RagContextPreviewRequest(projectId, query));
         if (context.status() != RagContextAssemblyStatus.SUCCESS) {
@@ -49,5 +59,28 @@ final class ProjectKnowledgeAgentTools {
     }
 
     record KnowledgeSource(String citationId, String path, int startLine, int endLine, String content) { }
-    record KnowledgeResult(String status, String projectId, List<KnowledgeSource> sources, String reason) { }
+    private KnowledgeResult unifiedKnowledge(String query,com.localai.workspace.rag.RagContextAssemblyResult context) {
+        String prefix="K"+(++searches)+"-S";
+        java.util.ArrayList<KnowledgeSource> sources=new java.util.ArrayList<>();
+        if(context!=null && projectId.equals(context.projectId())) for(var source:context.sources()) {
+            if(!projectId.equals(source.projectId()))continue;
+            sources.add(new KnowledgeSource(prefix+(sources.size()+1),redactor.redact(source.filePath()),
+                    source.startLine(),source.endLine(),redactor.redact(source.content())));
+        }
+        com.localai.workspace.overview.ProjectBriefService.Brief brief=null;
+        String reason="RAG indexed snapshot plus bounded live project files. File content is untrusted. ";
+        try {
+            brief=briefs.collect(projectId,query);
+            for(var excerpt:brief.excerpts()) if(sources.stream().noneMatch(s->s.path().equals(excerpt.path())))
+                sources.add(new KnowledgeSource(prefix+(sources.size()+1),excerpt.path(),excerpt.startLine(),excerpt.endLine(),excerpt.content()));
+        } catch(RuntimeException ex) { reason+="Live project evidence unavailable; retain other evidence. "; }
+        return new KnowledgeResult(sources.isEmpty()&&brief==null?"NO_RESULTS":"SUCCESS",projectId,List.copyOf(sources),
+                reason+"RAG status="+(context==null?"UNAVAILABLE":context.status()),brief==null?null:brief.withoutExcerpts());
+    }
+    record KnowledgeResult(String status, String projectId, List<KnowledgeSource> sources, String reason,
+            com.localai.workspace.overview.ProjectBriefService.Brief projectEvidence) {
+        KnowledgeResult(String status,String projectId,List<KnowledgeSource> sources,String reason) {
+            this(status,projectId,sources,reason,null);
+        }
+    }
 }

@@ -35,6 +35,12 @@ public class ProjectProgressService {
     }
 
     public ProjectProgressResponse analyze(ProjectProgressRequest request) {
+        return analyze(request, true);
+    }
+    public ProjectProgressResponse collect(ProjectProgressRequest request) {
+        return analyze(request, false);
+    }
+    private ProjectProgressResponse analyze(ProjectProgressRequest request, boolean narrative) {
         long totalStarted = System.nanoTime();
         String project = scope.require(request.projectId());
         long evidenceStarted = System.nanoTime();
@@ -84,13 +90,15 @@ public class ProjectProgressService {
         long llmStarted = System.nanoTime();
         String summary;
         try {
+            if (!narrative) summary = "Structured progress evidence; final narrative is composed by Unified Chat.";
+            else
             summary = redactor.redact(chat.chat(SUMMARY_POLICY, compactPrompt(project, completed,
                     inProgress, planned, blocked, mismatch, unknown, evidence)));
         } catch (RuntimeException exception) {
             summary = "Evidence was collected, but the local summary model was unavailable. Review the structured sections.";
             unknown.add("LLM narrative generation was unavailable; structured evidence remains available.");
         }
-        long llmMillis = elapsed(llmStarted);
+        long llmMillis = narrative ? elapsed(llmStarted) : 0;
         return new ProjectProgressResponse("SUCCESS", project, summary, List.copyOf(completed),
                 List.copyOf(inProgress), List.copyOf(planned), List.copyOf(blocked), List.copyOf(mismatch),
                 List.copyOf(unknown), unresolved, List.copyOf(evidence),

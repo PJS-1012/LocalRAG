@@ -33,6 +33,12 @@ public class DevelopmentActivityService {
     }
 
     public DevelopmentActivityResponse summarize(DevelopmentActivityRequest request) {
+        return summarize(request,true);
+    }
+    public DevelopmentActivityResponse collect(DevelopmentActivityRequest request) {
+        return summarize(request,false);
+    }
+    private DevelopmentActivityResponse summarize(DevelopmentActivityRequest request,boolean narrative) {
         long totalStarted=System.nanoTime();
         String project=scope.require(request.projectId());
         int limit=request.commitLimit()==null ? (request.since()==null ? 5 : 20) : request.commitLimit();
@@ -58,6 +64,8 @@ public class DevelopmentActivityService {
         String summary;
         String resultStatus="SUCCESS";
         try {
+            if(!narrative) summary="Structured activity evidence; final narrative is composed by Unified Chat.";
+            else
             summary=redactor.redact(chat.chat(SUMMARY_POLICY,
                     "Project="+project+"\nSince="+request.since()+"\nCommits="+safeCommits(commits)
                             +"\nChanged areas="+changedAreas+"\nWorking tree clean="+status.clean()
@@ -66,7 +74,7 @@ public class DevelopmentActivityService {
         } catch(RuntimeException exception) {
             summary="Git evidence was collected, but the local summary model was unavailable.";
         }
-        long llmMillis=elapsed(llmStarted);
+        long llmMillis=narrative?elapsed(llmStarted):0;
         return new DevelopmentActivityResponse(resultStatus,project,request.since(),limit,
                 commits,changedAreas,summary,status,decisionEvidence,Instant.now(),gitMillis,ragMillis,llmMillis,
                 elapsed(totalStarted));

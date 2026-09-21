@@ -17,6 +17,8 @@ final class DeveloperWorkflowAgentTools {
     private final ErrorSimilarityService similarities;
     private final ProjectProgressService progress;
     private final DevelopmentActivityService activity;
+    private boolean evidenceOnly;
+    DeveloperWorkflowAgentTools evidenceOnly() { this.evidenceOnly=true; return this; }
 
     DeveloperWorkflowAgentTools(String allowedProjectId, ErrorSimilarityService similarities,
             ProjectProgressService progress, DevelopmentActivityService activity) {
@@ -43,7 +45,8 @@ final class DeveloperWorkflowAgentTools {
     ProjectProgressResponse analyzeProjectProgress(
             @ToolParam(description="Exact projectId from the current request") String projectId) {
         requireScope(projectId);
-        return progress.analyze(new ProjectProgressRequest(projectId));
+        return evidenceOnly ? progress.collect(new ProjectProgressRequest(projectId))
+                : progress.analyze(new ProjectProgressRequest(projectId));
     }
 
     @Tool(name="summarizeRecentDevelopment", description="Summarize recent development from Git evidence and "
@@ -54,7 +57,8 @@ final class DeveloperWorkflowAgentTools {
             @ToolParam(description="RECENT, TODAY, LAST_24_HOURS, or LAST_7_DAYS", required=false) String timeRange,
             @ToolParam(description="Commit limit 1-20; use 5 when omitted", required=false) Integer commitLimit) {
         requireScope(projectId);
-        return activity.summarize(new DevelopmentActivityRequest(projectId,since(timeRange),commitLimit));
+        var request=new DevelopmentActivityRequest(projectId,since(timeRange),commitLimit);
+        return evidenceOnly ? activity.collect(request) : activity.summarize(request);
     }
 
     private Instant since(String timeRange) {

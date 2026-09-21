@@ -22,8 +22,11 @@ final class AgentToolExecution {
     private final List<AgentKnowledgeSource> knowledgeSources = new ArrayList<>();
     private final boolean captureEvidence;
     private final List<ToolEvidence> evidence = new ArrayList<>();
+    private final int maxCalls;
+    private final java.util.Map<String,String> memo=new java.util.HashMap<>();
     AgentToolExecution() { this(false); }
-    AgentToolExecution(boolean captureEvidence) { this.captureEvidence = captureEvidence; }
+    AgentToolExecution(boolean captureEvidence) { this(captureEvidence,Integer.MAX_VALUE); }
+    AgentToolExecution(boolean captureEvidence,int maxCalls) { this.captureEvidence=captureEvidence;this.maxCalls=maxCalls; }
     synchronized List<ToolEvidence> evidence() { return List.copyOf(evidence); }
 
     ToolCallback wrap(ToolCallback delegate) {
@@ -38,6 +41,7 @@ final class AgentToolExecution {
     }
 
     private synchronized String execute(ToolCallback delegate, String input, ToolContext context) {
+        if(calls.size()>=maxCalls) throw new IllegalStateException("Read-only Tool budget exceeded");
         long started = System.nanoTime();
         String name = delegate.getToolDefinition().name();
         Integer duplicate = null;
@@ -53,7 +57,11 @@ final class AgentToolExecution {
                     break;
                 }
             }
-            output = delegate.call(input, context);
+            String memoKey=name+":"+parsedInput;
+            if(maxCalls!=Integer.MAX_VALUE && name.equals("searchProjectKnowledge") && calls.stream().filter(c->c.toolName().equals(name)).count()>=2)
+                output="{\"status\":\"BUDGET_EXCEEDED\",\"reason\":\"Use already collected evidence\"}";
+            else if(maxCalls!=Integer.MAX_VALUE && memo.containsKey(memoKey)) output=memo.get(memoKey);
+            else { output = delegate.call(input, context); if(maxCalls!=Integer.MAX_VALUE)memo.put(memoKey,output); }
             JsonNode result = JSON.readTree(output);
             outcome = result.path("status").asText("FAILED");
             // Status is metadata, never pass arbitrary result text into warnings or telemetry.
@@ -128,7 +136,7 @@ final class AgentToolExecution {
         }
         for (JsonNode source : sources) {
             String id = source.path("citationId").asText("");
-            if (!id.matches("K\\d+-S\\d+")) {
+            if (!id.matches("K\\d+-S\\d+") || knowledgeSources.stream().anyMatch(s->s.id().equals(id))) {
                 continue;
             }
             knowledgeSources.add(new AgentKnowledgeSource(
@@ -164,7 +172,7 @@ final class AgentToolExecution {
             case "getRecentCommits", "getGitDiffSummary", "getGitStatus" ->
                     "Git chronology or changed paths do not establish causation with an error.";
             case "searchProjectKnowledge" ->
-                    "Indexed snapshot only. Cite factual implementation claims with the returned citationId values.";
+                    "Indexed snapshots and, when present, bounded live project file samples. Cite implementation claims with returned citationId values. Metadata and filenames alone do not prove behavior.";
             case "findSimilarErrors" ->
                     "Past similarity is a candidate only, not proof of the current cause. Preserve each history trust label.";
             case "analyzeProjectProgress" ->

@@ -29,6 +29,10 @@ management:
         include: health,info
 
 localrag:
+  unified:
+    max-output-tokens: 1200
+  overview:
+    metadata-cache-ttl: PT5M
   errors:
     draft-ttl: PT30M
     max-drafts: 100

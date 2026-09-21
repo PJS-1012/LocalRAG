@@ -35,6 +35,15 @@ public class ErrorAnalysisService {
         long started = System.nanoTime();
         String project = scope.require(request.projectId());
         var run = agent.analyzeError(new AgentChatRequest(project, redactor.redact(request.query())));
+        return assemble(request,project,run,started,true);
+    }
+
+    /** Reuse diagnosis validation on an existing Tool run; no model call or saved draft. */
+    public ErrorAnalysisResult reviewCollected(ErrorAnalysisRequest request,AgentAnalysisRun run) {
+        return assemble(request,scope.require(request.projectId()),run,System.nanoTime(),false);
+    }
+
+    private ErrorAnalysisResult assemble(ErrorAnalysisRequest request,String project,AgentAnalysisRun run,long started,boolean saveDraft) {
         var response = run.response();
         var evidence = new ArrayList<ToolEvidence>();
         var unknown = new ArrayList<String>();
@@ -96,7 +105,7 @@ public class ErrorAnalysisService {
                 List.copyOf(evidence), List.copyOf(unknown), List.copyOf(paths), List.copyOf(commits),
                 sanitizeResponse(response, project, request.query(), narrative),
                 toolMs, toolMs, ragMs, response.llmDurationMillis(), (System.nanoTime()-started)/1_000_000);
-        remember(result);
+        if(saveDraft)remember(result);
         return result;
     }
 

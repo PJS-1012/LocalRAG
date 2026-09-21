@@ -9,8 +9,14 @@ public class DashboardGitService {
     private final GitProcessRunner runner;
     public DashboardGitService(GitProcessRunner runner) { this.runner = runner; }
     public record Commit(String hash, String message, String author, String timestamp, String pushStatus) {}
+    public record Changes(long modified,long added,long deleted) {}
     public record Snapshot(String status, String branch, Boolean clean, String upstream,
-            Long ahead, Long behind, String remoteStatus, List<Commit> commits, String reason) {}
+            Long ahead, Long behind, String remoteStatus, List<Commit> commits, String reason,Changes changes) {
+        public Snapshot(String status,String branch,Boolean clean,String upstream,Long ahead,Long behind,
+                String remoteStatus,List<Commit> commits,String reason) {
+            this(status,branch,clean,upstream,ahead,behind,remoteStatus,commits,reason,null);
+        }
+    }
     public Snapshot read(DetectedProject project) {
         if (!project.gitRepository()) return new Snapshot("NOT_GIT_REPOSITORY",null,null,null,null,null,"NOT_GIT_REPOSITORY",List.of(),null);
         var status = runner.status(project.rootPath());
@@ -50,7 +56,18 @@ public class DashboardGitService {
             commits.add(new Commit(f[0],f[1],f[2],f[3],pushStatus));
         }
         return new Snapshot("SUCCESS",branch,clean,upstream,ahead,behind,remote,List.copyOf(commits),
-                log.successful()?null:"Recent commits unavailable");
+                log.successful()?null:"Recent commits unavailable",changes(status.output()));
+    }
+    private Changes changes(String output) {
+        long modified=0,added=0,deleted=0;
+        for(String line:output.split("\\R")) {
+            if(line.startsWith("##")||line.length()<3)continue;
+            String xy=line.substring(0,2);
+            if(xy.contains("D"))deleted++;
+            else if(xy.equals("??")||xy.contains("A"))added++;
+            else modified++;
+        }
+        return new Changes(modified,added,deleted);
     }
     private Snapshot unavailable(String reason) { return new Snapshot("UNAVAILABLE",null,null,null,null,null,"UNAVAILABLE",List.of(),reason); }
 }

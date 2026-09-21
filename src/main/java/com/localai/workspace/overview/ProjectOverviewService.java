@@ -62,6 +62,20 @@ public class ProjectOverviewService {
                 Instant.now(),elapsed(started));
     }
 
+    /** Cheap subset for conversational evidence: no environment inspection or LLM invocation. */
+    public Map<String,Object> facts(String projectId) {
+        Map<String,Object> facts=new LinkedHashMap<>();List<String> warnings=new ArrayList<>();
+        facts.put("index",safe("Project index",warnings,()->indexes.stats(projectId)));
+        facts.put("errorHistory",safe("Error History",warnings,()->errors.automationState(projectId)));
+        var runs=safe("Automation History",warnings,()->automation.list(projectId,0,1));
+        if(runs!=null&&!runs.content().isEmpty()) {
+            var last=runs.content().get(0);
+            facts.put("automation",Map.of("status",last.status(),"finishedAt",String.valueOf(last.finishedAt()),
+                    "changeDetected",last.changeDetected()));
+        } else facts.put("automation",runs==null?"UNAVAILABLE":"NO_RUNS");
+        facts.put("warnings",warnings);
+        return facts;
+    }
     private <T> T safe(String label,List<String> warnings,Supplier<T> supplier) {
         try { return supplier.get(); }
         catch(RuntimeException exception) { warnings.add(label+" unavailable");return null; }

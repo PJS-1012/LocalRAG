@@ -39,6 +39,13 @@ class DashboardGitServiceTest {
         var result=new DashboardGitService(runner).read(project);
         assertThat(result.remoteStatus()).isEqualTo("UNAVAILABLE");assertThat(result.ahead()).isNull();
     }
+    @Test void workingChangesAreCountedWithoutExtraProcessCalls() {
+        when(runner.status(root)).thenReturn(ok("## main\n M a.java\n?? b.java\nA  c.java\n D d.java\nR  a -> b\n"));
+        when(runner.recentCommits(root,5)).thenReturn(ok(""));
+        assertThat(new DashboardGitService(runner).read(project).changes()).isEqualTo(new DashboardGitService.Changes(2,2,1));
+        verify(runner,times(1)).status(root);verify(runner,times(1)).recentCommits(root,5);
+        verifyNoMoreInteractions(runner);
+    }
     @Test void unbornBranchRetainsItsActualName() {
         when(runner.status(root)).thenReturn(ok("## No commits yet on master\n?? readme.md"));
         when(runner.recentCommits(root,5)).thenReturn(new GitCommandResult(128,"",false,false));

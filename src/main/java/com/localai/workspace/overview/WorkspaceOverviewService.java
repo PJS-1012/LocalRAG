@@ -12,12 +12,16 @@ public class WorkspaceOverviewService {
     private final ProjectDiscoveryService discovery;
     private final DashboardGitService git;
     private final JdbcTemplate jdbc;
+    private ProjectMetadataService metadata;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setMetadata(ProjectMetadataService metadata) { this.metadata=metadata; }
     public WorkspaceOverviewService(ProjectDiscoveryService discovery, DashboardGitService git, JdbcTemplate jdbc) {
         this.discovery=discovery; this.git=git; this.jdbc=jdbc;
     }
     public record ProjectSummary(DetectedProject project, DashboardGitService.Snapshot git,
             Long indexedDocumentCount, Long indexedChunkCount, String automationStatus,
-            Long errorHistoryCount, Long notificationCount, List<String> warnings) {}
+            Long errorHistoryCount, Long notificationCount, List<String> warnings,
+            ProjectMetadataService.Languages languages) {}
     public record Summary(List<ProjectSummary> projects, Instant collectedAt, long durationMillis, String remoteBasis) {}
     public Summary get() {
         long start=System.nanoTime();
@@ -35,8 +39,11 @@ public class WorkspaceOverviewService {
             try { snapshot=git.read(project); }
             catch(RuntimeException ex) { snapshot=null;projectWarnings.add("Git metadata unavailable"); }
             String automation=configs==null?"UNKNOWN":Boolean.TRUE.equals(configs.getOrDefault(id,Map.of()).get("enabled"))?"ENABLED":"DISABLED";
+            ProjectMetadataService.Languages languages=null;
+            if(metadata!=null) try { languages=metadata.get(project).statistics(); }
+            catch(RuntimeException ex) { projectWarnings.add("Language metadata unavailable"); }
             result.add(new ProjectSummary(project,snapshot,count(indexes,id,"documents"),count(indexes,id,"chunks"),
-                    automation,count(errors,id,"total"),count(notifications,id,"total"),List.copyOf(projectWarnings)));
+                    automation,count(errors,id,"total"),count(notifications,id,"total"),List.copyOf(projectWarnings),languages));
         }
         return new Summary(List.copyOf(result),Instant.now(),(System.nanoTime()-start)/1_000_000,
                 "Configured upstream, locally cached refs; no automatic fetch");

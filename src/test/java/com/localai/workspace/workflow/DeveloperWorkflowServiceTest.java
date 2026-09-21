@@ -72,6 +72,21 @@ class DeveloperWorkflowServiceTest {
         assertThat(result.commitLimit()).isEqualTo(20);
     }
 
+    @Test void evidenceOnlyCollectionDoesNotInvokeNarrativeModel() {
+        when(scope.require("Local_Ai_Work")).thenReturn("Local_Ai_Work");
+        when(git.getStatus(anyString())).thenReturn(status(true,List.of()));
+        when(git.getRecentCommits(anyString(),anyInt())).thenReturn(new GitRecentCommitsResult("Local_Ai_Work",
+                GitToolStatus.SUCCESS,5,0,List.of(),null));
+        when(git.getDiffSummary(anyString())).thenReturn(new GitDiffSummaryResult("Local_Ai_Work",
+                GitToolStatus.SUCCESS,0,0,0,List.of(),List.of(),null));
+        when(histories.unresolved(anyString())).thenReturn(new ErrorHistoryQueryService.UnresolvedResult(0,List.of()));
+        when(rag.assemble(any())).thenReturn(context(List.of()));
+        assertThat(new ProjectProgressService(scope,git,rag,histories,chat,redactor)
+                .collect(new ProjectProgressRequest("Local_Ai_Work")).llmDurationMillis()).isZero();
+        assertThat(new DevelopmentActivityService(scope,git,rag,chat,redactor)
+                .collect(new DevelopmentActivityRequest("Local_Ai_Work",null,5)).llmDurationMillis()).isZero();
+        verifyNoInteractions(chat);
+    }
     private GitStatusResult status(boolean clean,List<String> modified) {
         return new GitStatusResult("Local_Ai_Work",GitToolStatus.SUCCESS,"main",clean,modified,
                 List.of(),List.of(),List.of(),null);

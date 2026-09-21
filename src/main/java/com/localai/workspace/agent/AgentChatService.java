@@ -150,6 +150,39 @@ public class AgentChatService {
         return chat(request, SYSTEM_PROMPT, new AgentToolExecution());
     }
 
+    public AgentAnalysisRun unified(AgentChatRequest request,
+            com.localai.workspace.overview.ProjectBriefService briefs) {
+        long started=System.nanoTime();
+        var execution=new AgentToolExecution(true,6);
+        var response=chat(request,UnifiedChatPolicy.PROMPT,execution,briefs);
+        boolean retried=false;
+        if(response.toolsUsed().isEmpty() && !response.answer().stripLeading().startsWith("[GENERAL]")
+                && response.status()!=AgentChatStatus.LLM_FAILED) {
+            // Ambiguous/unverified no-tool output is not evidence. Retry selection once, never expose the draft.
+            retried=true;
+            response=chat(request,UnifiedChatPolicy.PROMPT+
+                    "\nA prior unverified no-tool draft was discarded. For selected-project questions inspect "+
+                    "the relevant existing Tools now. Only genuinely project-independent concepts may use [GENERAL].",
+                    execution,briefs);
+        }
+        String answer=response.answer();
+        var warnings=new ArrayList<>(response.warnings());
+        var status=response.status();
+        if(response.toolsUsed().isEmpty() && !answer.stripLeading().startsWith("[GENERAL]")
+                && status!=AgentChatStatus.LLM_FAILED) {
+            answer="프로젝트 근거를 확인하지 못해 답변을 보류했습니다. 확인되지 않은 파일이나 구현을 추측하지 않습니다.";
+            status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
+            warnings.add("Unverified no-tool answer withheld");
+        } else answer=answer.replaceFirst("^\\s*\\[GENERAL\\]\\s*","");
+        if(retried)warnings.add("Unverified initial draft discarded; Tool selection retried once");
+        if(status==AgentChatStatus.SUCCESS&&!warnings.isEmpty())status=AgentChatStatus.SUCCESS_WITH_WARNINGS;
+        long total=elapsedMillis(started),toolMs=response.toolExecutionDurationMillis();
+        return new AgentAnalysisRun(new AgentChatResponse(response.projectId(),response.query(),answer,response.toolsUsed(),
+                toolMs,Math.max(0,total-toolMs),total,status,List.copyOf(warnings),response.toolCalls(),
+                response.knowledgeSourceCount(),response.knowledgeSources(),response.usedSourceIds(),response.invalidSourceIds()),
+                execution.evidence());
+    }
+
     /** Uses the same read-only callbacks; no persistence Tool is registered. */
     public AgentAnalysisRun analyzeError(AgentChatRequest request) {
         var execution = new AgentToolExecution(true);
@@ -170,6 +203,10 @@ public class AgentChatService {
     }
 
     private AgentChatResponse chat(AgentChatRequest request, String policy, AgentToolExecution execution) {
+        return chat(request,policy,execution,null);
+    }
+    private AgentChatResponse chat(AgentChatRequest request, String policy, AgentToolExecution execution,
+            com.localai.workspace.overview.ProjectBriefService briefs) {
         long totalStartedAt = System.nanoTime();
         GitAgentTools gitTools = new GitAgentTools(request.projectId(), gitService);
         DockerAgentTools dockerTools = new DockerAgentTools(request.projectId(), dockerService);
@@ -177,22 +214,21 @@ public class AgentChatService {
         DatabaseAgentTools databaseTools = new DatabaseAgentTools(databaseService);
         LogAgentTools logTools = new LogAgentTools(request.projectId(), logService);
         var knowledgeTools = new ProjectKnowledgeAgentTools(request.projectId(), contextService, redactor);
+        if(briefs!=null)knowledgeTools.withBriefs(briefs);
         List<Object> registeredTools = new ArrayList<>(List.of(
                 gitTools, dockerTools, ollamaTools, databaseTools, logTools, knowledgeTools));
         if (similarityService != null && progressService != null && activityService != null) {
-            registeredTools.add(new DeveloperWorkflowAgentTools(request.projectId(), similarityService,
-                    progressService, activityService));
+            var workflow=new DeveloperWorkflowAgentTools(request.projectId(), similarityService, progressService, activityService);
+            registeredTools.add(briefs==null?workflow:workflow.evidenceOnly());
         }
         var callbacks = Arrays.stream(ToolCallbacks.from(registeredTools.toArray()))
                 .map(execution::wrap).toArray(org.springframework.ai.tool.ToolCallback[]::new);
         long llmStartedAt = System.nanoTime();
         String answer;
         try {
-            answer = chatService.chatWithToolCallbacks(
-                    policy,
-                    userPrompt(request),
-                    callbacks
-            );
+            answer = briefs==null
+                    ? chatService.chatWithToolCallbacks(policy,userPrompt(request),callbacks)
+                    : chatService.chatUnifiedWithToolCallbacks(policy,userPrompt(request),callbacks);
             if (answer == null || answer.isBlank()) {
                 throw new IllegalStateException("Empty Agent response");
             }
