@@ -18,7 +18,7 @@ beforeEach(()=>{localStorage.clear();vi.stubGlobal('fetch',vi.fn(async(input:Req
 })
 
 it('loads Projects and changes the global Project selection',async()=>{
-  render(<App/>);const picker=await screen.findByLabelText('Project 선택')
+  render(<App/>);const picker=await screen.findByLabelText('프로젝트 선택')
   expect(picker).toHaveValue('Local_Ai_Work')
   await userEvent.selectOptions(picker,'Room/client')
   await waitFor(()=>expect(picker).toHaveValue('Room/client'))

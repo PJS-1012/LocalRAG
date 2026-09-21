@@ -6,6 +6,6 @@ vi.mock('../api/errorApi',()=>({errorApi:{list:vi.fn().mockResolvedValue({conten
 it('renders project-scoped Error History with verification status',async()=>{
   render(<ErrorsPage projectId="P" project={null} overview={null} refreshOverview={vi.fn()}/>)
   expect(await screen.findByText('NullPointerException')).toBeInTheDocument()
-  expect(screen.getAllByText('UNVERIFIED')).toHaveLength(2)
+  expect(screen.getByText('미검증')).toBeInTheDocument()
   expect(screen.getByText('src/A.java')).toBeInTheDocument()
 })

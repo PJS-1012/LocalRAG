@@ -9,6 +9,7 @@ import { StatusBadge } from './components/ui'
 import { statusTone } from './lib/format'
 import DashboardPage from './pages/DashboardPage'
 import RagPage from './pages/RagPage'
+import UnifiedChatPage from './pages/UnifiedChatPage'
 import AgentPage from './pages/AgentPage'
 import ErrorsPage from './pages/ErrorsPage'
 import ProgressPage from './pages/ProgressPage'
@@ -17,17 +18,18 @@ import AutomationPage from './pages/AutomationPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SettingsPage from './pages/SettingsPage'
 
-export type RouteKey = 'dashboard' | 'knowledge' | 'agent' | 'errors' | 'progress' | 'activity' | 'automation' | 'notifications' | 'settings'
+export type RouteKey = 'dashboard' | 'chat' | 'knowledge' | 'agent' | 'errors' | 'progress' | 'activity' | 'automation' | 'notifications' | 'settings'
 const NAV: Array<{ id: RouteKey; label: string; icon: string; group?: string }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⌂' },
-  { id: 'knowledge', label: 'Chat / Knowledge', icon: '◈', group: 'WORKSPACE' },
-  { id: 'agent', label: 'Agent', icon: '⌘' },
-  { id: 'errors', label: 'Errors', icon: '!' },
-  { id: 'progress', label: 'Progress', icon: '↗', group: 'INTELLIGENCE' },
-  { id: 'activity', label: 'Activity', icon: '≋' },
-  { id: 'automation', label: 'Automation', icon: '⟳', group: 'OPERATIONS' },
-  { id: 'notifications', label: 'Notifications', icon: '◇' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'dashboard', label: '대시보드', icon: '⌂' },
+  { id: 'chat', label: '채팅', icon: '◈', group: '작업공간' },
+  { id: 'errors', label: '오류 관리', icon: '!' },
+  { id: 'progress', label: '진행 상태', icon: '↗', group: '작업 현황' },
+  { id: 'activity', label: '최근 작업', icon: '≋' },
+  { id: 'automation', label: '자동화', icon: '⟳', group: '관리' },
+  { id: 'notifications', label: '알림', icon: '◇' },
+  { id: 'settings', label: '설정', icon: '⚙' },
+  { id: 'agent', label: '에이전트 상세', icon: '⌘', group: '고급 기능' },
+  { id: 'knowledge', label: '지식 검색 상세', icon: '◈' },
 ]
 
 export default function App() {
@@ -48,7 +50,7 @@ export default function App() {
       const value = await dashboardApi.summary()
       if (!Array.isArray(value.projects)) throw new Error('Invalid summary response')
       setSummary(value)
-    } catch { setSummaryError('Project metadata를 불러오지 못했습니다. Refresh metadata로 다시 시도하세요.') }
+    } catch { setSummaryError('프로젝트 정보를 불러오지 못했습니다. 메타데이터 새로고침으로 다시 시도하세요.') }
   }, [])
 
   const connectBackend = useCallback(async () => {
@@ -93,6 +95,7 @@ export default function App() {
   const selectedProject = useMemo<DetectedProject | null>(() => discovery?.projects.find(project => project.projectId === selectedId) ?? null, [discovery, selectedId])
   const pageProps = { projectId: selectedId, project: selectedProject, overview, refreshOverview }
   const currentPage = {
+    chat: <UnifiedChatPage key={selectedId} {...pageProps}/>,
     dashboard: <><ProjectList summary={summary} error={summaryError} retry={() => void refreshSummary()} /><DashboardPage {...pageProps} gitSummary={summary?.projects.find(p => p.project.projectId === selectedId)?.git ?? null} /></>,
     knowledge: <RagPage {...pageProps} />,
     agent: <AgentPage {...pageProps} />,
@@ -109,13 +112,13 @@ export default function App() {
     <aside className={`sidebar ${navOpen ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark">LR</div><div><strong>LocalRAG</strong><span>WORKBENCH</span></div></div>
       <nav>{NAV.map(item => <div key={item.id}>{item.group && <div className="nav-group">{item.group}</div>}<button className={route === item.id ? 'nav-active' : ''} onClick={() => { setRoute(item.id); setNavOpen(false) }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'notifications' && overview && overview.unacknowledgedNotificationCount > 0 && <em>{overview.unacknowledgedNotificationCount}</em>}</button></div>)}</nav>
-      <div className="sidebar-foot"><span className={`connection-light ${backendStatus === 'READY' ? '' : 'offline'}`} /><div><strong>{backendStatus === 'STARTING' ? 'Backend starting' : backendError ? 'Backend offline' : 'Local mode'}</strong><small>Java 17 · qwen3</small></div></div>
+      <div className="sidebar-foot"><span className={`connection-light ${backendStatus === 'READY' ? '' : 'offline'}`} /><div><strong>{backendStatus === 'STARTING' ? 'Backend starting' : backendError ? 'Backend offline' : '로컬 모드'}</strong><small>Java 17 · qwen3</small></div></div>
     </aside>
     <div className="workspace">
       <header className="topbar">
         <button className="mobile-menu" onClick={() => setNavOpen(value => !value)}>☰</button>
-        <div className="workspace-label"><span>WORKSPACE</span><strong>{discovery?.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? '연결 대기'}</strong></div>
-        <div className="project-picker"><label htmlFor="project-select">PROJECT</label><select id="project-select" aria-label="Project 선택" value={selectedId} onChange={event => setSelectedId(event.target.value)}><option value="">Project 없음</option>{discovery?.projects.map(project => <option key={project.projectId} value={project.projectId}>{project.name} · {project.projectType}</option>)}</select></div>
+        <div className="workspace-label"><span>작업공간</span><strong>{discovery?.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? '연결 대기'}</strong></div>
+        <div className="project-picker"><label htmlFor="project-select">프로젝트</label><select id="project-select" aria-label="프로젝트 선택" value={selectedId} onChange={event => setSelectedId(event.target.value)}><option value="">Project 없음</option>{discovery?.projects.map(project => <option key={project.projectId} value={project.projectId}>{project.name} · {project.projectType}</option>)}</select></div>
         <div className="top-statuses">
           <StatusBadge label={`Docker ${overview?.docker?.status ?? '—'}`} tone={statusTone(overview?.docker?.status)} />
           <StatusBadge label={`DB ${overview?.database?.status ?? '—'}`} tone={statusTone(overview?.database?.status)} />

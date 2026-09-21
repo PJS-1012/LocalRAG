@@ -1,4 +1,15 @@
 /* Desktop readability: retain density while lifting secondary information. */
+:root { font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif; }
+.status-badge, .metric strong, .triple-count strong { font-family: "Segoe UI", "Malgun Gothic", sans-serif; letter-spacing: normal; }
+.status-badge, .commit-list .status-badge, .project-row small, .metadata-note, .commit-list .commit-author { font-size: 14px; line-height: 1.5; }
+.split-workspace > * { min-width: 0; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.suggestions button { border: 1px solid #35526a; border-radius: 8px; background: #102333; color: #cce7f8; padding: 8px 12px; cursor: pointer; }
+.unified-source { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-size: 14px; }
+.unified-source p { margin: 6px 0; }
+.evidence-json { max-height: 300px; overflow: auto; font: 13px/1.6 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.citation { color: #65d6ff; }
+.language-info { color: #a5e3ff !important; }
 .panel-heading h2 { font-size: 18px; }
 .detail-list dt, .detail-list dd, .service-list > div > span, .muted,
 .panel-heading > span, .panel-heading small, .notice { font-size: 14px; line-height: 1.5; }
@@ -34,3 +45,4 @@
 .startup-stages > div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .startup-stages small { grid-column: 1/-1; font-size: 14px; color: #a1b1c5; }
 @media(max-width:1000px) { .project-row { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+.status-badge, .commit-list .status-badge, .project-row small, .metadata-note, .commit-list .commit-author { font-size: 14px; line-height: 1.5; }

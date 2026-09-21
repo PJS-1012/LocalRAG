@@ -13,7 +13,7 @@ export const statusTone = (status?: string | null) => {
   const normalized = status?.toUpperCase() ?? ''
   if (['UP', 'SUCCESS', 'AVAILABLE', 'RESOLVED', 'READ_SUCCESS', 'INDEXED'].includes(normalized)) return 'ok' as const
   if (['FAILED', 'DOWN', 'NOT_RUNNING', 'UNAVAILABLE'].includes(normalized)) return 'bad' as const
-  if (['PARTIAL_SUCCESS', 'UNVERIFIED', 'ALREADY_RUNNING'].includes(normalized)) return 'warn' as const
+  if (['PARTIAL_SUCCESS', 'UNVERIFIED', 'ALREADY_RUNNING','SUCCESS_WITH_WARNINGS','INSUFFICIENT_EVIDENCE','NO_EVIDENCE'].includes(normalized)) return 'warn' as const
   if (['VERIFIED', 'CHANGED', 'RUNNING'].includes(normalized)) return 'info' as const
   return 'muted' as const
 }

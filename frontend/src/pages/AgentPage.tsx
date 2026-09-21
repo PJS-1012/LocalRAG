@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { submitOnEnter } from '../lib/chatInput'
 import { agentApi } from '../api/agentApi'
 import { ApiError } from '../api/client'
 import { EmptyState, ErrorNotice, LoadingState, PageHeader, Panel, StatusBadge } from '../components/ui'
@@ -12,22 +13,24 @@ export default function AgentPage({ projectId, project }: ProjectPageProps) {
   const [query, setQuery] = useState('현재 Git 상태 알려줘')
   const [result, setResult] = useState<AgentResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const submitting = useRef(false)
   const [error, setError] = useState<string | null>(null)
   if (!projectId) return <EmptyState title="Project가 필요합니다" description="Agent Tool의 실행 범위를 제한하기 위해 Project를 선택해주세요." />
   const run = async (event?: React.FormEvent) => {
-    event?.preventDefault(); if (!query.trim()) return
+    event?.preventDefault(); if (submitting.current || !query.trim()) return
+    submitting.current = true
     setLoading(true);setError(null);setResult(null)
     try { setResult(await agentApi.ask(projectId, query.trim())) }
     catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Agent 요청에 실패했습니다.') }
-    finally { setLoading(false) }
+    finally { submitting.current = false; setLoading(false) }
   }
   return <>
-    <PageHeader eyebrow="READ-ONLY AGENT" title="Local developer assistant" description={`${project?.name ?? projectId} 범위에서 허용된 Tool만 선택합니다.`} />
+    <PageHeader eyebrow="고급 기능 · 읽기 전용" title="에이전트 상세" description={`${project?.name ?? projectId} 범위에서 허용된 Tool만 선택합니다.`} />
     <div className="agent-layout"><Panel className="chat-panel"><div className="suggestions">{EXAMPLES.map(example => <button key={example} onClick={() => setQuery(example)}>{example}</button>)}</div><div className="chat-scroll agent-scroll">
       {!result && !loading && <div className="chat-intro"><span className="orb">⌘</span><h2>한 문장으로 상태를 확인하세요</h2><p>Git, Docker, DB, Ollama, Log와 Project 지식을 읽기 전용으로 조합합니다.</p></div>}
       {loading && <LoadingState label="Tool 선택 및 Local Model 분석 중" />}{error && <ErrorNotice message={error} />}
       {result && <div className="message-stack"><div className="message message-user">{result.query}</div><div className="message message-assistant"><div className="message-meta"><StatusBadge label={result.status} tone={statusTone(result.status)} /><span>LLM {formatDuration(result.llmDurationMillis)}</span></div><div className="answer-copy">{result.answer}</div>{result.warnings.length > 0 && <div className="warning-list">{result.warnings.join(' · ')}</div>}</div></div>}
-    </div><form className="prompt-box" onSubmit={run}><textarea aria-label="Agent 질문" rows={3} value={query} onChange={event => setQuery(event.target.value)} /><div><span>Read-only · project scoped · tool evidence</span><button className="button button-primary" disabled={loading || !query.trim()}>Agent 실행</button></div></form></Panel>
+    </div><form className="prompt-box" onSubmit={run}><textarea aria-label="Agent 질문" rows={3} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => submitOnEnter(event, loading || !query.trim())} /><div><span>Enter 전송 · Shift+Enter 줄바꿈 · Read-only</span><button className="button button-primary" disabled={loading || !query.trim()}>Agent 실행</button></div></form></Panel>
     <Panel><div className="panel-heading"><div><span className="eyebrow">TOOL TRACE</span><h2>Execution details</h2></div><span>{formatDuration(result?.toolExecutionDurationMillis)}</span></div>{result?.toolCalls.length ? <div className="tool-trace">{result.toolCalls.map(call => <div key={call.sequence}><span>{call.sequence}</span><div><strong>{call.toolName}</strong><small>{call.outcome}{call.sameArgumentsAs ? ` · #${call.sameArgumentsAs} 재사용` : ''}</small></div><StatusBadge label={formatDuration(call.durationMillis)} tone={call.successful ? 'ok' : 'bad'} /></div>)}</div> : <div className="inline-empty">사용된 Tool과 실행 시간이 표시됩니다.</div>}</Panel></div>
   </>
 }

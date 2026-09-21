@@ -1,8 +1,9 @@
 import type { PropsWithChildren, ReactNode } from 'react'
 import type { StatusTone } from '../types'
+import { label as localizedLabel } from '../lib/labels'
 
 export function StatusBadge({ label, tone = 'muted' }: { label: string; tone?: StatusTone }) {
-  return <span className={`status-badge status-${tone}`}><span className="status-dot" />{label}</span>
+  return <span className={`status-badge status-${tone}`}><span className="status-dot" />{localizedLabel(label)}</span>
 }
 
 export function Panel({ children, className = '' }: PropsWithChildren<{ className?: string }>) {

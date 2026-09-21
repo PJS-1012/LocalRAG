@@ -39,11 +39,13 @@ export interface GitStatus {
 
 export interface RecentCommit { hash: string; message: string; author: string; timestamp: string }
 export interface DashboardGit {
+  changes?: { modified: number; added: number; deleted: number } | null
   status: string; branch: string | null; clean: boolean | null; upstream: string | null
   ahead: number | null; behind: number | null; remoteStatus: string; reason: string | null
   commits: Array<RecentCommit & { pushStatus: string }>
 }
 export interface ProjectSummary {
+  languages?: { status: string; basis: string; languages: Array<{ name: string; files: number; percent: number }>; totalSourceFiles: number; scannedAt: string; scanDurationMillis: number; cacheHit: boolean } | null
   project: DetectedProject; git: DashboardGit | null; indexedDocumentCount: number | null
   indexedChunkCount: number | null; automationStatus: string; errorHistoryCount: number | null
   notificationCount: number | null; warnings: string[]
