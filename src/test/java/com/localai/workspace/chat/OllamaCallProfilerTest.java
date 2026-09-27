@@ -22,13 +22,13 @@ class OllamaCallProfilerTest {
         try(var trace=UnifiedRequestTrace.begin()) {
             String selection="""
                 {"message":{"content":"","tool_calls":[{"function":{"name":"getGitStatus","arguments":{}}}]},
-                 "prompt_eval_count":21,"eval_count":4,"eval_duration":12000000,"done_reason":"stop"}
+                 "prompt_eval_count":21,"eval_count":4,"eval_duration":12000000,"done":true,"done_reason":"stop"}
                 """;
             var first=profiler.interceptor().intercept(request,bytes(input),
                     (r,b)->new MockClientHttpResponse(bytes(selection),HttpStatus.OK));
             assertThat(new String(first.getBody().readAllBytes(),StandardCharsets.UTF_8)).isEqualTo(selection);
             String answer="""
-                {"message":{"content":"PRIVATE_ANSWER"},"prompt_eval_count":35,"eval_count":9,"done_reason":"stop"}
+                {"message":{"content":"PRIVATE_ANSWER"},"prompt_eval_count":35,"eval_count":9,"done":true,"done_reason":"stop"}
                 """;
             profiler.interceptor().intercept(request,bytes(input),
                     (r,b)->new MockClientHttpResponse(bytes(answer),HttpStatus.OK));
@@ -42,6 +42,14 @@ class OllamaCallProfilerTest {
             assertThat(snapshot.toString()).doesNotContain("PRIVATE_QUERY","PRIVATE_ANSWER");
         }
         assertThat(UnifiedRequestTrace.current()).isNull();
+    }
+    @Test void http200DoesNotMeanGenerationCompleted() throws Exception {
+        for(String completion:java.util.List.of("",",\"done\":false,\"done_reason\":\"stop\"",
+                ",\"done\":true,\"done_reason\":\"length\""))try(var trace=UnifiedRequestTrace.begin()) {
+            profiler.interceptor().intercept(request,bytes(input),(r,b)->new MockClientHttpResponse(
+                    bytes("{\"message\":{\"content\":\"partial\"}"+completion+"}"),HttpStatus.OK));
+            assertThat(trace.snapshot().llmCalls().get(0).success()).isFalse();
+        }
     }
     @Test void capturesFailedAttemptsAndDoesNotSwallowTransportFailure() {
         try(var trace=UnifiedRequestTrace.begin()) {

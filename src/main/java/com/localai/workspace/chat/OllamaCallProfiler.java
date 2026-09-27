@@ -46,7 +46,10 @@ public class OllamaCallProfiler implements RestClientCustomizer {
                 if (result == null) result = json.createObjectNode();
                 var message = result.path("message");
                 boolean toolSelection = message.path("tool_calls").isArray() && !message.path("tool_calls").isEmpty();
-                boolean success = response.getStatusCode().is2xxSuccessful() && !result.has("error");
+                String finish=result.path("done_reason").asText("unknown");
+                boolean success = response.getStatusCode().is2xxSuccessful() && !result.has("error")
+                        && result.path("done").asBoolean(false)
+                        && (finish.equals("stop") || toolSelection && finish.equals("tool_calls"));
                 long outputChars = message.path("content").asText("").length();
                 if (toolSelection) outputChars += message.get("tool_calls").toString().length();
                 trace.addCall(success ? (toolSelection ? "TOOL_SELECTION" : "FINAL_ANSWER") : "FAILED_REQUEST",
@@ -54,7 +57,7 @@ public class OllamaCallProfiler implements RestClientCustomizer {
                         message.path("thinking").asText("").length(), elapsed, success,
                         result.path("prompt_eval_count").asLong(), result.path("eval_count").asLong(),
                         millis(result, "load_duration"), millis(result, "prompt_eval_duration"),
-                        millis(result, "eval_duration"), result.path("done_reason").asText("unknown"));
+                        millis(result, "eval_duration"), finish);
                 return replay(response, bytes);
             } catch (IOException | RuntimeException error) {
                 trace.addCall("FAILED_REQUEST", input.path("model").asText("unknown"), inputChars,

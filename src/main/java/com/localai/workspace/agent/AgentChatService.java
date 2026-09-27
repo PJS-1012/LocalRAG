@@ -165,7 +165,7 @@ public class AgentChatService {
         var warnings=new ArrayList<>(response.warnings());
         var status=response.status();
         var missing=missingRequestedSymbols(request,execution.evidence());
-        if(!missing.isEmpty()) {
+        if(status!=AgentChatStatus.LLM_FAILED && !missing.isEmpty()) {
             answer="현재 확보된 근거에서는 "+String.join(", ",missing)+" 구현을 확인하지 못했습니다. "
                     +"이름만으로 기능을 추측하지 않습니다. 프로젝트 전체에 존재하지 않는다는 뜻은 아닙니다.";
             status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
@@ -259,7 +259,8 @@ public class AgentChatService {
             List<String> warnings = new ArrayList<>(execution.warnings());
             warnings.add("Agent model failed to complete the request");
             return new AgentChatResponse(
-                    request.projectId(), request.query(), failureAnswer(request.query()), failedTools,
+                    request.projectId(), request.query(), exception instanceof com.localai.workspace.chat.IncompleteResponseException
+                            ? exception.getMessage() : failureAnswer(request.query()), failedTools,
                     failedToolDuration, Math.max(0, llmDuration - failedToolDuration),
                     elapsedMillis(totalStartedAt), AgentChatStatus.LLM_FAILED,
                     List.copyOf(warnings), failedInvocations,

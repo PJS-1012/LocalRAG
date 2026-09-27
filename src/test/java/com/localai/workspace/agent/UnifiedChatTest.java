@@ -83,6 +83,13 @@ class UnifiedChatTest {
   assertThat(result.status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
   assertThat(result.answer()).contains("확인하지 못했습니다").doesNotContain("예약을 관리");
  }
+ @Test void incompleteResponseHasFailureStatusAndExplicitMessage() {
+  when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class)))
+    .thenThrow(new com.localai.workspace.chat.IncompleteResponseException());
+  var result=service.unified(new AgentChatRequest("P","ReservationLockService는?"),briefs).response();
+  assertThat(result.status()).isEqualTo(AgentChatStatus.LLM_FAILED);
+  assertThat(result.answer()).contains("정상 종료", "다시 시도");
+ }
  @Test void noRagSourcesDoesNotBlockGitAnswer() {
   when(git.getStatus("P")).thenReturn(new GitStatusResult("P",GitToolStatus.SUCCESS,"main",true,List.of(),List.of(),List.of(),List.of(),null));
   when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class))).thenAnswer(inv->{

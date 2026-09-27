@@ -24,7 +24,8 @@ class UnifiedToolRoundTest {
     }
     AssistantMessage.ToolCall call(String name,String args) { return new AssistantMessage.ToolCall("id","function",name,args); }
     ChatResponse response(String text,List<AssistantMessage.ToolCall> calls) {
-        return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content(text).toolCalls(calls).build())));
+        return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content(text).toolCalls(calls).build(),
+                org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder().finishReason("stop").build())));
     }
     @Test void exactlyTwoModelCallsAndFinalPromptHasNoToolSchemaOrDraft() {
         var model=mock(ChatModel.class);
@@ -49,6 +50,28 @@ class UnifiedToolRoundTest {
         var service=new ChatService(ChatClient.builder(model),16384);
         assertThat(service.chatUnifiedWithToolCallbacks("policy","query",callback)).startsWith("[GENERAL]");
         verify(model,times(1)).call(any(Prompt.class));verify(callback,never()).call(anyString());
+    }
+    @Test void incompleteFinalOrGeneralAnswerIsRejectedWithoutRetry() {
+        for(String finish:List.of("length","unknown",""))for(boolean tools:List.of(false,true)) {
+            var model=mock(ChatModel.class);
+            var callback=callback("getGitStatus","{}");
+            var partial=new ChatResponse(List.of(new Generation(new AssistantMessage("중간에서 잘린 답변"),
+                    org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder().finishReason(finish).build())));
+            if(tools)when(model.call(any(Prompt.class))).thenReturn(response("",List.of(call("getGitStatus","{}"))),partial);
+            else when(model.call(any(Prompt.class))).thenReturn(partial);
+            assertThatThrownBy(()->new ChatService(ChatClient.builder(model),16384)
+                    .chatUnifiedWithToolCallbacks("policy","query",callback)).isInstanceOf(IncompleteResponseException.class);
+            verify(model,times(tools?2:1)).call(any(Prompt.class));
+        }
+    }
+    @Test void failedHttpCompletionCannotBeOverriddenBySdkStopMetadata() {
+        try(var trace=UnifiedRequestTrace.begin()) {
+            trace.addCall("FAILED_REQUEST","model",1,0,10,0,1,false,0,0,0,0,0,"stop");
+            var model=mock(ChatModel.class);
+            when(model.call(any(Prompt.class))).thenReturn(response("partial",List.of()));
+            assertThatThrownBy(()->new ChatService(ChatClient.builder(model),16384)
+                    .chatUnifiedWithToolCallbacks("policy","query")).isInstanceOf(IncompleteResponseException.class);
+        }
     }
     @Test void handoverAddsOnlyExistingProgressAndActivityAndDeduplicatesPlan() {
         var knowledge=callback("searchProjectKnowledge","{\"status\":\"SUCCESS\"}");

@@ -30,6 +30,13 @@ it('retains source citation links and tool evidence details',async()=>{
  expect(screen.getByText('src/Reservation.java')).toBeInTheDocument()
  expect(screen.getByText('searchProjectKnowledge 근거 상세')).toBeInTheDocument()
 })
+it('shows incomplete generation as failure rather than success',async()=>{
+ vi.mocked(apiRequest).mockResolvedValue({...response,result:{...response.result,status:'LLM_FAILED',answer:'응답이 중간에 종료되었습니다. 다시 시도해주세요.'}})
+ render(<UnifiedChatPage {...props}/>);fireEvent.change(screen.getByLabelText('채팅 질문'),{target:{value:'소개'}});fireEvent.click(screen.getByText('전송'))
+ expect(await screen.findByText('응답이 중간에 종료되었습니다. 다시 시도해주세요.')).toBeInTheDocument()
+ expect(screen.getByText('모델 응답 실패')).toBeInTheDocument()
+ expect(screen.queryByText('완료')).not.toBeInTheDocument()
+})
 it('keeps model timing and route diagnostics collapsed by default',async()=>{
  vi.mocked(apiRequest).mockResolvedValue({...response,diagnostics:{intent:'PROJECT_OVERVIEW',llmCallCount:2,vectorSearchMs:12,queryEmbeddingMs:90,llmCalls:[{callNumber:2,purpose:'FINAL_ANSWER',inputContextChars:4000,toolSchemaChars:0,outputChars:500,durationMs:9000}]}})
  render(<UnifiedChatPage {...props}/>);fireEvent.change(screen.getByLabelText('채팅 질문'),{target:{value:'소개'}});fireEvent.click(screen.getByText('전송'))
