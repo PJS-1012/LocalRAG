@@ -164,12 +164,12 @@ public class AgentChatService {
         String answer=response.answer();
         var warnings=new ArrayList<>(response.warnings());
         var status=response.status();
-        var missing=missingRequestedSymbols(request,execution.evidence());
+        var missing=missingEvidenceSymbols(request,answer,execution.evidence());
         if(status!=AgentChatStatus.LLM_FAILED && !missing.isEmpty()) {
-            answer="현재 확보된 근거에서는 "+String.join(", ",missing)+" 구현을 확인하지 못했습니다. "
-                    +"이름만으로 기능을 추측하지 않습니다. 프로젝트 전체에 존재하지 않는다는 뜻은 아닙니다.";
+            answer="현재 확보된 근거에서는 확인되지 않습니다. 클래스·파일 이름만으로 구현을 추측하지 않습니다. "
+                    +"프로젝트 전체에 존재하지 않는다는 뜻은 아닙니다.";
             status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
-            warnings.add("Requested code identifier not present in collected source evidence");
+            warnings.add("Code identifier or file not present in collected source evidence");
         }
         if(response.toolsUsed().isEmpty() && !answer.stripLeading().startsWith("[GENERAL]")
                 && status!=AgentChatStatus.LLM_FAILED) {
@@ -187,17 +187,28 @@ public class AgentChatService {
                 execution.evidence());
     }
 
-    private List<String> missingRequestedSymbols(AgentChatRequest request,List<ToolEvidence> evidence) {
+    private List<String> missingEvidenceSymbols(AgentChatRequest request,String answer,List<ToolEvidence> evidence) {
         var knowledge=evidence.stream().filter(e->e.toolName().equals("searchProjectKnowledge")).toList();
         if(knowledge.isEmpty())return List.of();
         StringBuilder source=new StringBuilder();
         for(var item:knowledge)for(var file:item.result().path("sources"))
             source.append(file.path("path").asText()).append('\n').append(file.path("content").asText()).append('\n');
-        var matcher=java.util.regex.Pattern.compile("\\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\\b").matcher(request.query());
+        return unsupportedIdentifiers(request.query()+"\n"+answer,source.toString(),request.projectId());
+    }
+
+    // ASCII boundaries intentionally allow Korean particles (Service는/Service가).
+    // A bounded lexical guard, not a semantic claim verifier. Run only on knowledge-backed answers.
+    static List<String> unsupportedIdentifiers(String text,String source,String projectId) {
+        var matcher=java.util.regex.Pattern.compile(
+                "(?<![A-Za-z0-9_])(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\\.(?:java|cs|kt|py|ts|tsx|js|jsx|md|json|yml|yaml)"
+                +"|[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+)(?![A-Za-z0-9_])").matcher(text);
         var missing=new java.util.LinkedHashSet<String>();
         while(matcher.find()) {
             String symbol=matcher.group();
-            if(!request.projectId().contains(symbol)&&source.indexOf(symbol)<0)missing.add(symbol);
+            boolean projectName=java.util.Arrays.asList(projectId.replace('\\','/').split("/")).contains(symbol);
+            boolean present=java.util.regex.Pattern.compile("(?<![A-Za-z0-9_])"
+                    +java.util.regex.Pattern.quote(symbol)+"(?![A-Za-z0-9_])").matcher(source).find();
+            if(!projectName && !present)missing.add(symbol);
         }
         return List.copyOf(missing);
     }

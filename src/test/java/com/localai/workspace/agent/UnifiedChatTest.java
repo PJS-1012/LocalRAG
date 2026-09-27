@@ -81,7 +81,27 @@ class UnifiedChatTest {
   });
   var result=service.unified(new AgentChatRequest("P","UnseenService 역할"),briefs).response();
   assertThat(result.status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
-  assertThat(result.answer()).contains("확인하지 못했습니다").doesNotContain("예약을 관리");
+  assertThat(result.answer()).contains("현재 확보된 근거에서는 확인되지 않습니다").doesNotContain("예약을 관리");
+ }
+ @Test void identifiersWithKoreanParticlesAndFilesNeedExactEvidence() {
+  for(String text:List.of("ReservationLockService는", "ReservationLockService가", "ReservationLockService의 역할",
+    "ReservationLockService.java는", "register.ts에서 구현합니다")) {
+   assertThat(AgentChatService.unsupportedIdentifiers(text,"class OtherReservationLockService {}", "P")).hasSize(1);
+  }
+  assertThat(AgentChatService.unsupportedIdentifiers("ReservationLockService는 예약 잠금을 담당합니다.",
+    "class ReservationLockService {}","P")).isEmpty();
+  assertThat(AgentChatService.unsupportedIdentifiers("register.ts에서", "src/register.ts","P")).isEmpty();
+ }
+ @Test void inventedAnswerSymbolIsBlockedEvenWhenUserDidNotNameItAndCitationExists() {
+  when(rag.assemble(any())).thenReturn(ProjectKnowledgeAgentToolsTest.context("P"));
+  when(briefs.collect(anyString(),anyString())).thenThrow(new RuntimeException("unavailable"));
+  when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class))).thenAnswer(inv->{
+   AgentChatServiceTest.call(AgentChatServiceTest.callbacks(inv.getArguments()),"searchProjectKnowledge","{\"query\":\"소개\"}");
+   return "InventedPaymentService가 결제를 처리합니다 [K1-S1].";
+  });
+  var result=service.unified(new AgentChatRequest("P","프로젝트 소개"),briefs).response();
+  assertThat(result.status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
+  assertThat(result.answer()).doesNotContain("InventedPaymentService","결제를 처리");
  }
  @Test void incompleteResponseHasFailureStatusAndExplicitMessage() {
   when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class)))
