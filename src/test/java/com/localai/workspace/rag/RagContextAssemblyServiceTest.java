@@ -131,6 +131,18 @@ class RagContextAssemblyServiceTest {
         assertThat(result.context()).isEmpty();
     }
 
+    @Test void filtersNoiseAndDuplicateChunksWithoutChangingScopeChecks() {
+        var search=mock(ProjectSemanticSearchService.class);
+        when(search.search(org.mockito.ArgumentMatchers.any())).thenReturn(success(List.of(
+                match(1,"font","Assets/TextMesh Pro/Fonts/OFL.txt",0.99,"font license"),
+                match(2,"generated","performance/k6/results/output.json",0.98,"metrics"),
+                match(3,"own","Assets/_Project/Scripts/Main.cs",0.7,"own code"),
+                match(4,"duplicate","Assets/_Project/Scripts/Main.cs",0.6,"own code"))));
+        var result=service(search,8000).assemble(new RagContextPreviewRequest("Local_Ai_Work","overview"));
+        assertThat(result.sources()).extracting(RagContextSource::chunkId).containsExactly("own");
+        assertThat(result.context()).doesNotContain("font license","metrics");
+    }
+
     private RagContextAssemblyService service(ProjectSemanticSearchService searchService, int budget) {
         return new RagContextAssemblyService(searchService, new RagContextProperties(budget));
     }

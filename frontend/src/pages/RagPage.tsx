@@ -32,10 +32,12 @@ export default function RagPage({ projectId, project, overview }: ProjectPagePro
   if (!projectId) return <EmptyState title="Project가 필요합니다" description="RAG 검색 범위를 강제하기 위해 먼저 Project를 선택해주세요." />
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); if (submitting.current || !query.trim()) return
+    const submittedQuery = query
+    setQuery('')
     submitting.current = true
     setLoading(true); setError(null); setResult(null); setSelected(null); setDocument(null)
-    try { setResult(await ragApi.ask(projectId, query.trim())) }
-    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'RAG 요청에 실패했습니다.') }
+    try { setResult(await ragApi.ask(projectId, submittedQuery.trim())) }
+    catch (reason) { setQuery(current => current || submittedQuery); setError(reason instanceof ApiError ? reason.message : 'RAG 요청에 실패했습니다.') }
     finally { submitting.current = false; setLoading(false) }
   }
   const openSource = async (source: RagSource) => {

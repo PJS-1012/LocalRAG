@@ -18,10 +18,12 @@ export default function AgentPage({ projectId, project }: ProjectPageProps) {
   if (!projectId) return <EmptyState title="Project가 필요합니다" description="Agent Tool의 실행 범위를 제한하기 위해 Project를 선택해주세요." />
   const run = async (event?: React.FormEvent) => {
     event?.preventDefault(); if (submitting.current || !query.trim()) return
+    const submittedQuery = query
+    setQuery('')
     submitting.current = true
     setLoading(true);setError(null);setResult(null)
-    try { setResult(await agentApi.ask(projectId, query.trim())) }
-    catch (reason) { setError(reason instanceof ApiError ? reason.message : 'Agent 요청에 실패했습니다.') }
+    try { setResult(await agentApi.ask(projectId, submittedQuery.trim())) }
+    catch (reason) { setQuery(current => current || submittedQuery); setError(reason instanceof ApiError ? reason.message : 'Agent 요청에 실패했습니다.') }
     finally { submitting.current = false; setLoading(false) }
   }
   return <>

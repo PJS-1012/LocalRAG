@@ -10,6 +10,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/workspaces/projects/chat/unified")
 public class UnifiedChatController {
+    private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(UnifiedChatController.class);
     private final AgentChatService agent;
     private final ErrorProjectScope scope;
     private final ProjectBriefService briefs;
@@ -20,10 +21,13 @@ public class UnifiedChatController {
     }
     public record Request(@NotBlank String projectId,@NotBlank @Size(max=4000) String query) {}
     public record Diagnosis(String status,List<String> limitations) {}
-    public record Response(AgentChatResponse result,String routing,List<String> routes,List<ToolEvidence> evidence,Diagnosis diagnosis) {}
+    public record Response(AgentChatResponse result,String routing,List<String> routes,List<ToolEvidence> evidence,Diagnosis diagnosis,
+            com.localai.workspace.chat.UnifiedRequestTrace.Snapshot diagnostics) {}
     @PostMapping
     public Response chat(@Valid @RequestBody Request request) {
+        try (var trace=com.localai.workspace.chat.UnifiedRequestTrace.begin()) {
         String project=scope.require(request.projectId());
+        trace.projectId(project);
         var run=agent.unified(new AgentChatRequest(project,request.query()),briefs);
         var result=run.response();
         boolean answered=result.status()==AgentChatStatus.SUCCESS || result.status()==AgentChatStatus.SUCCESS_WITH_WARNINGS;
@@ -33,6 +37,9 @@ public class UnifiedChatController {
             var review=errors.reviewCollected(new com.localai.workspace.errors.ErrorAnalysisRequest(project,request.query()),run);
             diagnosis=new Diagnosis(review.evidenceStatus(),review.unknown());
         }
-        return new Response(run.response(),"EXISTING_AGENT_TOOL_SELECTION",routes,run.evidence(),diagnosis);
+        var diagnostics=trace.snapshot();
+        LOG.info("Unified request metrics: {}",diagnostics);
+        return new Response(run.response(),"EXISTING_AGENT_TOOL_SELECTION",routes,run.evidence(),diagnosis,diagnostics);
+        }
     }
 }

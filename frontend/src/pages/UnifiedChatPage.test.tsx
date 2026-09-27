@@ -30,3 +30,10 @@ it('retains source citation links and tool evidence details',async()=>{
  expect(screen.getByText('src/Reservation.java')).toBeInTheDocument()
  expect(screen.getByText('searchProjectKnowledge 근거 상세')).toBeInTheDocument()
 })
+it('keeps model timing and route diagnostics collapsed by default',async()=>{
+ vi.mocked(apiRequest).mockResolvedValue({...response,diagnostics:{intent:'PROJECT_OVERVIEW',llmCallCount:2,vectorSearchMs:12,queryEmbeddingMs:90,llmCalls:[{callNumber:2,purpose:'FINAL_ANSWER',inputContextChars:4000,toolSchemaChars:0,outputChars:500,durationMs:9000}]}})
+ render(<UnifiedChatPage {...props}/>);fireEvent.change(screen.getByLabelText('채팅 질문'),{target:{value:'소개'}});fireEvent.click(screen.getByText('전송'))
+ const summary=await screen.findByText('처리 경로 · 모델 2회')
+ expect(summary.closest('details')).not.toHaveAttribute('open')
+ expect(screen.getByText('의도: PROJECT_OVERVIEW')).toBeInTheDocument()
+})

@@ -7,7 +7,7 @@ import { EmptyState, ErrorNotice, LoadingState, PageHeader, Panel, StatusBadge }
 import type { AgentResponse } from '../types'
 import type { ProjectPageProps } from './pageTypes'
 
-interface UnifiedResponse { result: AgentResponse; routing: string; routes: string[]; evidence: Array<{ sequence: number; toolName: string; observedAt: string; result: unknown }> }
+interface UnifiedResponse { result: AgentResponse; routing: string; routes: string[]; evidence: Array<{ sequence: number; toolName: string; observedAt: string; result: unknown }>; diagnostics?: { intent: string; llmCallCount: number; vectorSearchMs: number; queryEmbeddingMs: number; llmCalls: Array<{ callNumber: number; purpose: string; inputContextChars: number; toolSchemaChars: number; outputChars: number; durationMs: number }> } }
 function evidenceGroup(name:string) {
   if(name==='searchProjectKnowledge')return '코드·문서 / 프로젝트 정보'
   if(['analyzeProjectProgress','summarizeRecentDevelopment','findSimilarErrors'].includes(name))return '작업 이력'
@@ -23,9 +23,11 @@ export default function UnifiedChatPage({ projectId, project }: ProjectPageProps
   if(!projectId)return <EmptyState title="프로젝트를 선택해주세요" description="상단에서 프로젝트를 선택하면 해당 범위의 코드와 상태를 함께 확인합니다."/>
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(busy.current||!query.trim())return
+    const submittedQuery=query
+    setQuery('')
     busy.current=true;setLoading(true);setError(null);setResponse(null)
-    try {setResponse(await apiRequest<UnifiedResponse>('/api/workspaces/projects/chat/unified',{method:'POST',body:JSON.stringify({projectId,query:query.trim()})}))}
-    catch(reason){setError(reason instanceof Error?reason.message:'질문 처리에 실패했습니다.')}
+    try {setResponse(await apiRequest<UnifiedResponse>('/api/workspaces/projects/chat/unified',{method:'POST',body:JSON.stringify({projectId,query:submittedQuery.trim()})}))}
+    catch(reason){setQuery(current=>current||submittedQuery);setError(reason instanceof Error?reason.message:'질문 처리에 실패했습니다.')}
     finally{busy.current=false;setLoading(false)}
   }
   const result=response?.result
@@ -40,6 +42,7 @@ export default function UnifiedChatPage({ projectId, project }: ProjectPageProps
     </Panel><Panel className="sources-panel"><div className="panel-heading"><h2>답변 근거</h2><span className="source-count">{result?.knowledgeSourceCount??0}</span></div>
       <p className="metadata-note">코드·문서 / 실행 상태 / 작업 이력을 구분해서 확인하세요. 검색 결과가 없어도 다른 근거를 활용합니다.</p>
       {result&&<p>근거 수집 {formatDuration(result.toolExecutionDurationMillis)} · LLM {formatDuration(result.llmDurationMillis)}</p>}
+      {response?.diagnostics&&<details><summary>처리 경로 · 모델 {response.diagnostics.llmCallCount}회</summary><p>{response.routes.join(' → ')}</p><p>의도: {response.diagnostics.intent}</p><p>검색 {formatDuration(response.diagnostics.vectorSearchMs)} · 질문 벡터화 {formatDuration(response.diagnostics.queryEmbeddingMs)}</p>{response.diagnostics.llmCalls.map(c=><p key={c.callNumber}>#{c.callNumber} {c.purpose} · {formatDuration(c.durationMs)} · 입력 {c.inputContextChars.toLocaleString()}자 / 도구 정의 {c.toolSchemaChars.toLocaleString()}자 · 출력 {c.outputChars.toLocaleString()}자</p>)}</details>}
       <div className="source-list">{result?.knowledgeSources.map(s=><div className="unified-source" id={`source-${s.id}`} key={s.id}><strong>{s.id}</strong><p>{s.filePath}</p><small>근거 위치: {s.startLine}–{s.endLine}행</small></div>)}</div>
       {result?.toolCalls.map(c=><div className="unified-source" key={c.sequence}><strong>{c.sequence}. {c.toolName}</strong><p>{c.outcome} · {formatDuration(c.durationMillis)}</p></div>)}
       {response?.evidence.map(e=><details key={e.sequence}><summary>{e.toolName} 근거 상세</summary><p>{evidenceGroup(e.toolName)}</p><pre className="evidence-json">{JSON.stringify(e.result,null,2)}</pre></details>)}

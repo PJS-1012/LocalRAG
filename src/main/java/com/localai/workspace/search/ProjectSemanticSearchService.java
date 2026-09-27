@@ -95,8 +95,8 @@ public class ProjectSemanticSearchService {
         long embeddingStartedAt = System.nanoTime();
         float[] queryVector;
         try {
-            queryVector = embeddingService.embedVector(
-                    queryEmbeddingInput(query, instructionEnabled));
+            queryVector = com.localai.workspace.chat.UnifiedRequestTrace.measure("QUERY_EMBEDDING",
+                    () -> embeddingService.embedVector(queryEmbeddingInput(query, instructionEnabled)));
         } catch (RuntimeException exception) {
             return failure(
                     projectId,
@@ -134,12 +134,12 @@ public class ProjectSemanticSearchService {
 
         long databaseStartedAt = System.nanoTime();
         try {
-            List<StoredChunkMatch> storedMatches = repository.search(
+            List<StoredChunkMatch> storedMatches = com.localai.workspace.chat.UnifiedRequestTrace.measure("VECTOR_SEARCH", () -> repository.search(
                     projectId,
                     queryVector,
                     topK,
                     threshold
-            );
+            ));
             long databaseDurationMillis = elapsedMillis(databaseStartedAt);
             List<ProjectSemanticSearchMatch> matches = IntStream.range(0, storedMatches.size())
                     .mapToObj(index -> toMatch(index + 1, storedMatches.get(index)))

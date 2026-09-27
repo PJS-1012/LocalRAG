@@ -28,7 +28,7 @@ class UnifiedChatTest {
   var run=service.unified(new AgentChatRequest("P","인수인계해줘"),briefs);
   assertThat(run.response().status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
   assertThat(run.response().answer()).doesNotContain("Python","main.py");
-  verify(chat,times(2)).chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class));
+  verify(chat,times(1)).chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class));
  }
  @Test void failedRagStillReturnsLiveSourcesAndDeduplicatesRepeatedToolEvidence() {
   when(rag.assemble(any())).thenThrow(new IllegalStateException("No stored index"));
@@ -46,8 +46,9 @@ class UnifiedChatTest {
   assertThat(run.response().knowledgeSourceCount()).isEqualTo(1);
   assertThat(run.response().usedSourceIds()).containsExactly("K1-S1");
   assertThat(run.evidence()).hasSize(2);
-  verify(briefs,times(1)).collect("P","소개");
+  verify(briefs,times(1)).collect("P","처음 왔는데 알려줘");
   verify(rag,times(1)).assemble(any());
+  verify(rag).assemble(argThat(r->r.query().equals("처음 왔는데 알려줘")));
  }
  @Test void withheldProjectAnswerIsNotReportedAsGeneralKnowledgeRoute() {
   when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class))).thenReturn("Unverified project claim");
@@ -57,6 +58,30 @@ class UnifiedChatTest {
   var result=controller.chat(new UnifiedChatController.Request("P","인수인계해줘"));
   assertThat(result.routes()).containsExactly("UNRESOLVED");
   assertThat(result.result().status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
+ }
+ @Test void uncitedKnowledgeClaimIsWithheldWithoutAnotherModelCall() {
+  when(rag.assemble(any())).thenThrow(new IllegalStateException("No index"));
+  when(briefs.collect(eq("P"),anyString())).thenReturn(new ProjectBriefService.Brief("P","JAVA",null,
+    List.of(),List.of(),null,List.of(new ProjectBriefService.Excerpt("A.java",1,1,"class A {}")),Map.of(),List.of(),1));
+  when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class))).thenAnswer(inv->{
+   AgentChatServiceTest.call(AgentChatServiceTest.callbacks(inv.getArguments()),"searchProjectKnowledge","{\"query\":\"구현\"}");
+   return "회원가입과 결제가 모두 구현 완료됐습니다.";
+  });
+  var result=service.unified(new AgentChatRequest("P","구현 상태"),briefs).response();
+  assertThat(result.status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
+  assertThat(result.answer()).doesNotContain("구현 완료");
+  verify(chat,times(1)).chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class));
+ }
+ @Test void validCitationCannotJustifyARequestedClassMissingFromActualSources() {
+  when(rag.assemble(any())).thenReturn(ProjectKnowledgeAgentToolsTest.context("P"));
+  when(briefs.collect(anyString(),anyString())).thenThrow(new RuntimeException("unavailable"));
+  when(chat.chatUnifiedWithToolCallbacks(anyString(),anyString(),any(ToolCallback[].class))).thenAnswer(inv->{
+   AgentChatServiceTest.call(AgentChatServiceTest.callbacks(inv.getArguments()),"searchProjectKnowledge","{\"query\":\"UnseenService\"}");
+   return "UnseenService가 예약을 관리합니다 [K1-S1].";
+  });
+  var result=service.unified(new AgentChatRequest("P","UnseenService 역할"),briefs).response();
+  assertThat(result.status()).isEqualTo(AgentChatStatus.INSUFFICIENT_EVIDENCE);
+  assertThat(result.answer()).contains("확인하지 못했습니다").doesNotContain("예약을 관리");
  }
  @Test void noRagSourcesDoesNotBlockGitAnswer() {
   when(git.getStatus("P")).thenReturn(new GitStatusResult("P",GitToolStatus.SUCCESS,"main",true,List.of(),List.of(),List.of(),List.of(),null));

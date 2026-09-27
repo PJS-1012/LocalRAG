@@ -96,8 +96,11 @@ final class AgentToolExecution {
                     + "\"reason\":\"Inspection failed; cause not determined. "
                     + "Retain other Tool results and report this evidence gap.\"}";
         }
-        calls.add(new AgentToolCall(calls.size() + 1, name,
-                (System.nanoTime() - started) / 1_000_000, outcome, successful, duplicate));
+        long duration=(System.nanoTime() - started) / 1_000_000;
+        com.localai.workspace.chat.UnifiedRequestTrace.recordStage("TOOL_EXECUTION",duration);
+        if(name.equals("analyzeProjectProgress") || name.equals("summarizeRecentDevelopment"))
+            com.localai.workspace.chat.UnifiedRequestTrace.recordStage("PROGRESS_ACTIVITY",duration);
+        calls.add(new AgentToolCall(calls.size() + 1, name,duration, outcome, successful, duplicate));
         arguments.add(parsedInput);
         if (captureEvidence && evidence.size() < 32) {
             try {

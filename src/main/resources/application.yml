@@ -30,7 +30,9 @@ management:
 
 localrag:
   unified:
-    max-output-tokens: 1200
+    max-output-tokens: 650
+    context-window: 8192
+    temperature: 0.0
   overview:
     metadata-cache-ttl: PT5M
   errors:

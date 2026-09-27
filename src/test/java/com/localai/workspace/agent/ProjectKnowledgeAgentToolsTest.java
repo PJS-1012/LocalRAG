@@ -58,6 +58,20 @@ class ProjectKnowledgeAgentToolsTest {
         assertThat(tools.searchProjectKnowledge("query").status()).isEqualTo("NO_RESULTS");
     }
 
+    @Test void wrongBroadIntentCannotReplaceNarrowIndexedEvidenceOrRewriteOriginalQuestion() {
+        when(contexts.assemble(any())).thenReturn(context("Local_Ai_Work"));
+        var briefs=mock(com.localai.workspace.overview.ProjectBriefService.class);
+        when(briefs.collect(anyString(),anyString())).thenReturn(new com.localai.workspace.overview.ProjectBriefService.Brief(
+                "Local_Ai_Work","JAVA",null,List.of(),List.of(),null,
+                List.of(new com.localai.workspace.overview.ProjectBriefService.Excerpt("README.md",1,1,"generic overview")),
+                java.util.Map.of(),List.of(),1));
+        tools.withBriefs(briefs,"회원가입은 어떻게 처리해?");
+        var result=tools.searchProjectKnowledge("프로젝트 전체 소개",ProjectKnowledgeAgentTools.Intent.PROJECT_OVERVIEW);
+        verify(contexts).assemble(new RagContextPreviewRequest("Local_Ai_Work","회원가입은 어떻게 처리해?"));
+        assertThat(result.sources().get(0).path()).isEqualTo("src/A.java");
+        assertThat(result.sources()).hasSize(2);
+    }
+
     static RagContextAssemblyResult context(String projectId) {
         return new RagContextAssemblyResult(projectId, "query", 8000, 1, 1, 0, 120,
                 ProjectSemanticSearchStatus.SUCCESS, RagContextAssemblyStatus.SUCCESS, null,

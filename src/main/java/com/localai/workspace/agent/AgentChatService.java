@@ -152,35 +152,54 @@ public class AgentChatService {
 
     public AgentAnalysisRun unified(AgentChatRequest request,
             com.localai.workspace.overview.ProjectBriefService briefs) {
+        if(com.localai.workspace.chat.UnifiedRequestTrace.current()==null) {
+            try(var trace=com.localai.workspace.chat.UnifiedRequestTrace.begin()) {
+                trace.projectId(request.projectId());
+                return unified(request,briefs);
+            }
+        }
         long started=System.nanoTime();
         var execution=new AgentToolExecution(true,6);
         var response=chat(request,UnifiedChatPolicy.PROMPT,execution,briefs);
-        boolean retried=false;
-        if(response.toolsUsed().isEmpty() && !response.answer().stripLeading().startsWith("[GENERAL]")
-                && response.status()!=AgentChatStatus.LLM_FAILED) {
-            // Ambiguous/unverified no-tool output is not evidence. Retry selection once, never expose the draft.
-            retried=true;
-            response=chat(request,UnifiedChatPolicy.PROMPT+
-                    "\nA prior unverified no-tool draft was discarded. For selected-project questions inspect "+
-                    "the relevant existing Tools now. Only genuinely project-independent concepts may use [GENERAL].",
-                    execution,briefs);
-        }
         String answer=response.answer();
         var warnings=new ArrayList<>(response.warnings());
         var status=response.status();
+        var missing=missingRequestedSymbols(request,execution.evidence());
+        if(!missing.isEmpty()) {
+            answer="현재 확보된 근거에서는 "+String.join(", ",missing)+" 구현을 확인하지 못했습니다. "
+                    +"이름만으로 기능을 추측하지 않습니다. 프로젝트 전체에 존재하지 않는다는 뜻은 아닙니다.";
+            status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
+            warnings.add("Requested code identifier not present in collected source evidence");
+        }
         if(response.toolsUsed().isEmpty() && !answer.stripLeading().startsWith("[GENERAL]")
                 && status!=AgentChatStatus.LLM_FAILED) {
             answer="프로젝트 근거를 확인하지 못해 답변을 보류했습니다. 확인되지 않은 파일이나 구현을 추측하지 않습니다.";
             status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
             warnings.add("Unverified no-tool answer withheld");
         } else answer=answer.replaceFirst("^\\s*\\[GENERAL\\]\\s*","");
-        if(retried)warnings.add("Unverified initial draft discarded; Tool selection retried once");
         if(status==AgentChatStatus.SUCCESS&&!warnings.isEmpty())status=AgentChatStatus.SUCCESS_WITH_WARNINGS;
         long total=elapsedMillis(started),toolMs=response.toolExecutionDurationMillis();
+        var displayedCitations=citationValidator.validateAvailableSourceIds(answer,
+                response.knowledgeSources().stream().map(AgentKnowledgeSource::id).toList());
         return new AgentAnalysisRun(new AgentChatResponse(response.projectId(),response.query(),answer,response.toolsUsed(),
                 toolMs,Math.max(0,total-toolMs),total,status,List.copyOf(warnings),response.toolCalls(),
-                response.knowledgeSourceCount(),response.knowledgeSources(),response.usedSourceIds(),response.invalidSourceIds()),
+                response.knowledgeSourceCount(),response.knowledgeSources(),displayedCitations.usedSourceIds(),response.invalidSourceIds()),
                 execution.evidence());
+    }
+
+    private List<String> missingRequestedSymbols(AgentChatRequest request,List<ToolEvidence> evidence) {
+        var knowledge=evidence.stream().filter(e->e.toolName().equals("searchProjectKnowledge")).toList();
+        if(knowledge.isEmpty())return List.of();
+        StringBuilder source=new StringBuilder();
+        for(var item:knowledge)for(var file:item.result().path("sources"))
+            source.append(file.path("path").asText()).append('\n').append(file.path("content").asText()).append('\n');
+        var matcher=java.util.regex.Pattern.compile("\\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\\b").matcher(request.query());
+        var missing=new java.util.LinkedHashSet<String>();
+        while(matcher.find()) {
+            String symbol=matcher.group();
+            if(!request.projectId().contains(symbol)&&source.indexOf(symbol)<0)missing.add(symbol);
+        }
+        return List.copyOf(missing);
     }
 
     /** Uses the same read-only callbacks; no persistence Tool is registered. */
@@ -214,7 +233,7 @@ public class AgentChatService {
         DatabaseAgentTools databaseTools = new DatabaseAgentTools(databaseService);
         LogAgentTools logTools = new LogAgentTools(request.projectId(), logService);
         var knowledgeTools = new ProjectKnowledgeAgentTools(request.projectId(), contextService, redactor);
-        if(briefs!=null)knowledgeTools.withBriefs(briefs);
+        if(briefs!=null)knowledgeTools.withBriefs(briefs,request.query());
         List<Object> registeredTools = new ArrayList<>(List.of(
                 gitTools, dockerTools, ollamaTools, databaseTools, logTools, knowledgeTools));
         if (similarityService != null && progressService != null && activityService != null) {
@@ -265,6 +284,11 @@ public class AgentChatService {
             warnings.add("Answer contains no knowledge Source citation despite available evidence");
         }
         AgentChatStatus status = execution.status();
+        if(briefs!=null && (!citationValidation.invalidSourceIds().isEmpty()
+                || citationValidation.citationMissing() && toolsUsed.stream().allMatch("searchProjectKnowledge"::equals))) {
+            answer="수집한 자료와 답변의 출처 연결을 확인하지 못해 답변을 보류했습니다. 오른쪽 근거 자료를 확인해주세요.";
+            status=AgentChatStatus.INSUFFICIENT_EVIDENCE;
+        }
         if (status == AgentChatStatus.SUCCESS && !warnings.isEmpty()) {
             status = AgentChatStatus.SUCCESS_WITH_WARNINGS;
         }

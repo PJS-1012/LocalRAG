@@ -5,6 +5,11 @@ public record AgentKnowledgeSource(
         String id,
         String filePath,
         int startLine,
-        int endLine
+        int endLine,
+        String sourceOrigin
 ) {
+    public AgentKnowledgeSource(String id,String filePath,int startLine,int endLine) {
+        this(id,filePath,startLine,endLine,
+                com.localai.workspace.overview.ProjectEvidencePolicy.origin(filePath).name());
+    }
 }

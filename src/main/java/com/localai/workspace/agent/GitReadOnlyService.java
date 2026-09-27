@@ -27,6 +27,9 @@ public class GitReadOnlyService {
     }
 
     public GitStatusResult getStatus(String projectId) {
+        return com.localai.workspace.chat.UnifiedRequestTrace.reuse("git:status:"+projectId,()->readStatus(projectId));
+    }
+    private GitStatusResult readStatus(String projectId) {
         Optional<DetectedProject> resolved = resolve(projectId);
         if (resolved.isEmpty()) {
             return statusFailure(projectId, GitToolStatus.PROJECT_NOT_FOUND, "Project ID was not found in the Workspace");
@@ -43,6 +46,10 @@ public class GitReadOnlyService {
     }
 
     public GitRecentCommitsResult getRecentCommits(String projectId, int requestedLimit) {
+        return com.localai.workspace.chat.UnifiedRequestTrace.reuse("git:commits:"+projectId+":"+requestedLimit,
+                ()->readRecentCommits(projectId,requestedLimit));
+    }
+    private GitRecentCommitsResult readRecentCommits(String projectId,int requestedLimit) {
         int appliedLimit = Math.max(1, Math.min(requestedLimit, properties.maxRecentCommits()));
         Optional<DetectedProject> resolved = resolve(projectId);
         if (resolved.isEmpty()) {
@@ -77,6 +84,9 @@ public class GitReadOnlyService {
     }
 
     public GitDiffSummaryResult getDiffSummary(String projectId) {
+        return com.localai.workspace.chat.UnifiedRequestTrace.reuse("git:diff:"+projectId,()->readDiffSummary(projectId));
+    }
+    private GitDiffSummaryResult readDiffSummary(String projectId) {
         Optional<DetectedProject> resolved = resolve(projectId);
         if (resolved.isEmpty()) {
             return diffFailure(projectId, GitToolStatus.PROJECT_NOT_FOUND, "Project ID was not found in the Workspace");

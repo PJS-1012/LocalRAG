@@ -28,6 +28,9 @@ public class RagContextAssemblyService {
     }
 
     public RagContextAssemblyResult assemble(RagContextPreviewRequest request) {
+        return com.localai.workspace.chat.UnifiedRequestTrace.reuse("rag:"+request,()->assembleFresh(request));
+    }
+    private RagContextAssemblyResult assembleFresh(RagContextPreviewRequest request) {
         ProjectSemanticSearchResponse searchResponse = searchService.search(
                 new ProjectSemanticSearchRequest(
                         request == null ? null : request.projectId(),
@@ -73,6 +76,10 @@ public class RagContextAssemblyService {
         int excludedByBudget = 0;
 
         for (ProjectSemanticSearchMatch match : rankedMatches) {
+            if (!com.localai.workspace.overview.ProjectEvidencePolicy.allowed(match.filePath(), searchResponse.query()))
+                continue;
+            if (sources.stream().anyMatch(s -> s.filePath().equals(match.filePath())
+                    && s.startLine() == match.startLine() && s.endLine() == match.endLine())) continue;
             String citationId = "S" + (sources.size() + 1);
             RagContextSource source = toSource(citationId, match);
             String formattedSource = format(source);
