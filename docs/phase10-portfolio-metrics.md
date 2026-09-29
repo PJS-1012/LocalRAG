@@ -1,78 +1,44 @@
-# Phase 10 Portfolio Metrics
+# Phase 10 포트폴리오 측정 기록
 
-## Follow-up: Unified UX — 2026-09-22
+이 문서는 2026-09-15와 09-22 당시 측정값이다. 최신 테스트/배포 상태는 [배포 점검표](release-checklist.md), 최종 품질 한계는 [결정 0036](decisions/0036-final-quality-guards-and-release.md)을 따른다. 아래 수치를 현재 재측정값이나 운영 성능 보장으로 사용하지 않는다.
 
-The original Phase 10 measurements below remain historical. Current implementation has
-10 routes, one primary Unified Chat, Korean Project metadata and file-count language summaries.
-Validation: backend 190 tests (189 pass, 1 opt-in skip), frontend 26 pass, Rust 10 pass,
-Vite/Tauri/NSIS builds pass. Production WebView verified 13 Projects, detail expansion with
-zero extra requests, Enter submission and zero console errors.
+## 통합 화면 후속 측정 — 2026-09-22
 
-13-Project overview: cold 11.183 s / warm 3.128 s client wall time. Cache TTL is five minutes;
-no content scan or LLM is used for language statistics. Average of 15 real questions:
-24.817 s total = 0.850 s Tool work + 23.968 s LLM time (rounding applies).
+당시 10개 경로, 기본 통합 채팅, 한국어 프로젝트 메타데이터와 파일 수 기준 언어 통계를 제공했다. 백엔드 190개 중 189 통과/선택 실행 1개 제외, 프런트엔드 26개/Rust 10개 통과, Vite/Tauri/NSIS 빌드 성공이었다. 배포 WebView에서 프로젝트 13개, 상세 확장 추가 요청 0, Enter 전송, 콘솔 오류 0을 확인했다.
 
-Quality is **4 PASS / 10 PARTIAL / 1 FAIL**, not the 15/15 HTTP success rate.
-Seven answers omit knowledge citations; some incorrectly treat missing work records as no
-unfinished work. This is a portfolio example of evidence availability versus answer groundedness,
-not evidence of production-ready answer quality.
-See [full evaluation](unified-chat-evaluation.md) and
-[Decision Log 0034](decisions/0034-unified-chat-onboarding-korean-ux.md).
+13개 프로젝트 요약은 클라이언트 기준 콜드 11.183초/웜 3.128초였다. 캐시 TTL은 5분이며 언어 통계에 내용 탐색/LLM은 사용하지 않는다. 실제 질문 15개 평균은 전체 24.817초, 도구 0.850초, LLM 23.968초였다(반올림 차이 있음).
 
-## Original Phase 10 baseline
+품질은 **PASS 4 / PARTIAL 10 / FAIL 1**이며 HTTP 15/15 성공과 다르다. 7개 답변에 인용이 없고 미완료 기록의 부재를 미완료 작업 없음으로 단정한 사례가 있었다. 근거 확보와 답변 근거 일치가 다르다는 사례이지 운영 수준 품질 입증은 아니다. [질문별 평가](unified-chat-evaluation.md), [결정 0034](decisions/0034-unified-chat-onboarding-korean-ux.md)를 참고한다.
 
-Measured on the local Windows development machine on 2026-09-15. These values are regression
-and portfolio baselines, not production SLOs; filesystem cache, model warm-up, Docker state,
-and machine load affect timings.
+## 최초 기준 — 2026-09-15
 
-## Delivered surface
+로컬 Windows에서 측정했다. 파일시스템 캐시, 모델 준비 상태, Docker, 시스템 부하에 영향을 받는다.
 
-- 9 Project-scoped UI screens
-- 1 bounded backend overview endpoint
-- 7 frontend tests across 6 test files
-- 173 backend tests across 64 suites: 0 failures, 0 errors, 1 opt-in live test skipped
-- React 19, TypeScript 5.9, Vite 7; Java 17 and Spring Boot 3.5.16 retained
+- 프로젝트 범위 UI 화면 9개, 제한된 백엔드 요약 API 1개.
+- 프런트엔드 6파일/테스트 7개.
+- 백엔드 64묶음/테스트 173개, 실패·오류 0, 선택 실행 실제 모델 테스트 1개 제외.
+- React 19, TypeScript 5.9, Vite 7, Java 17, Spring Boot 3.5.16.
 
-## Build baseline
+### 빌드
 
-Production build compiled 49 modules in 0.85 seconds:
+모듈 49개를 0.85초에 빌드했다. HTML 0.45 kB/gzip 0.29 kB, CSS 22.10/gzip 5.45 kB, JavaScript 272.56/gzip 82.39 kB였다. Docker 통합 테스트를 포함한 백엔드 전체 회귀는 1분 15초였다.
 
-- HTML: 0.45 kB, gzip 0.29 kB
-- CSS: 22.10 kB, gzip 5.45 kB
-- JavaScript: 272.56 kB, gzip 82.39 kB
+### 실제 동작 점검
 
-The full backend regression suite completed in 1 minute 15 seconds with Docker-backed
-integration tests available.
+Vite HTTP 200은 346 ms, `/api` 프록시 요약은 전체 4,031 ms/서비스 보고 837 ms였다. 최종 요약은 Git/Docker/Ollama/PostgreSQL 사용 가능, Local_Ai_Work 인덱스 청크 259개였다.
 
-## Live smoke baseline
-
-The Vite page returned HTTP 200 in 346 ms. Its `/api` proxy returned the Project overview in
-4,031 ms wall time; the overview service reported 837 ms. The final overview showed Git,
-Docker, Ollama, and PostgreSQL available and 259 indexed Chunks for `Local_Ai_Work`.
-
-Representative real-model requests:
-
-| Flow | Result | Retrieval / tool | LLM | Total |
+| 흐름 | 결과 | 검색/도구 | LLM | 전체 |
 | --- | --- | ---: | ---: | ---: |
-| RAG Project-type question | SUCCESS, 5 sources, 2 used | 2,777 ms | 13,708 ms | 16,486 ms |
-| Agent Git-status question, first attempt | INSUFFICIENT_EVIDENCE | 138 ms | 29,740 ms | 29,945 ms |
-| Progress analysis | SUCCESS | 464 ms non-LLM work | 16,186 ms | 16,650 ms |
+| RAG 프로젝트 유형 질문 | SUCCESS, 출처 5개/사용 2개 | 2,777 ms | 13,708 ms | 16,486 ms |
+| Agent Git 최초 시도 | INSUFFICIENT_EVIDENCE | 138 ms | 29,740 ms | 29,945 ms |
+| 진행 상태 분석 | SUCCESS | 모델 외 464 ms | 16,186 ms | 16,650 ms |
 
-The Agent first attempt found `getGitStatus` but rejected its oversized evidence because
-`frontend/node_modules` was not ignored. Adding `frontend/.gitignore` restored the overview
-Git component to `SUCCESS`. This was an evidence-boundary failure, not an LLM tuning issue.
+Git 도구 선택은 맞았지만 추적 제외되지 않은 frontend/node_modules 출력이 상한을 넘었다. frontend/.gitignore 추가 후 요약 Git 상태는 SUCCESS였다. 모델 튜닝이 아닌 근거 크기 경계 문제였다.
 
-Automation Run Now completed in 413 ms with LLM invocation disabled for the smoke fixture.
-Run History returned one row and Notification Candidates returned one row. Error History
-returned a successful empty list; Similar Error Retrieval also succeeded with zero matches.
+모델 호출을 끈 자동화는 413 ms, 이력 1개/알림 후보 1개였다. 오류 이력과 유사 오류는 정상적인 빈 결과였다.
 
-## Validation notes
+### 검증 한계
 
-Browser automation could not complete because the workspace refresh helper repeatedly failed
-while loading the browser skill. The bounded fallback used real backend endpoints, the Vite
-HTTP server and proxy, plus jsdom user-flow tests. It verified the requested feature routes and
-data contracts, but it is not a pixel-level or native-browser interaction certification.
+브라우저 도구의 작업공간 새로고침 오류로 실제 백엔드/Vite/프록시와 jsdom 테스트로 대체했다. 경로/데이터 계약 검증이지 픽셀 단위 또는 실제 브라우저 조작 인증은 아니다.
 
-`npm audit` reports two moderate development-only advisories through the Vitest toolchain.
-The suggested automatic fix crosses a major Vitest version, so it is recorded for a deliberate
-dependency upgrade rather than mixed into Phase 10 feature completion.
+당시 npm audit에서 Vitest 개발 의존성 중간 심각도 권고 2건을 확인했다. 자동 수정은 주 버전 변경이 필요해 기능 완료와 섞지 않고 기록했다. 최신 취약점 재검사 결과는 아니다.

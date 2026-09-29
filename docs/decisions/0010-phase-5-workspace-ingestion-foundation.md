@@ -1,102 +1,77 @@
-# 0010. Phase 5 Workspace ingestion foundation
+# 0010. Phase 5 작업공간 수집 기반 정리
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Problem
+승인됨. Phase 5 종료 당시 기록이다. 이후 구현 범위는 최신 구조 문서를 참고한다.
 
-A local RAG system must not treat every file on the PC as an ingestion target. It needs an explicit Workspace
-boundary, reliable Project roots, metadata-first filtering, and safe text reads before chunking or vector storage.
+## 문제와 설계
 
-## Design
+PC의 모든 파일을 RAG 대상으로 삼을 수 없다. 작업공간 경계, 실제 프로젝트 루트,
+메타데이터 우선 필터, 안전한 읽기를 벡터 저장보다 먼저 확보해야 한다.
 
 ```text
 Workspace
-  -> Container / Project Discovery
-  -> Project Type Detection
-  -> Metadata Scan
-  -> Policy Filtering
-  -> Safe Single / Project Document Read
+ → Container / Project 탐지 → 타입 판별
+ → 메타데이터 탐색 → 정책 필터 → 단일/프로젝트 문서 읽기
 ```
 
-Phase 5 stops at safe in-memory text Documents. It does not chunk, embed, persist vectors, search semantically,
-run RAG, or introduce an Agent.
+Phase 5는 메모리의 안전한 텍스트 문서까지만 다뤘다. 청크·임베딩·벡터 저장·검색·RAG·Agent는 당시 범위 밖이다.
 
-## Decisions
+## 주요 결정
 
-- Use `C:/workspace` as the initial development Workspace, supplied by `WorkspaceProperties`.
-- Keep actual discovery and scan operations callable with an explicit `Path` so a future Workspace service can
-  supply roots from DB records.
-- Detect Java/Spring Boot, Unity, Node, .NET, and Python from explicit root markers; Git alone never determines type.
-- Separate structural Containers from scannable Projects.
-- Search one additional directory level only when a direct Workspace child remains UNKNOWN.
-- Do not search inside an already recognized Project root.
-- Use the normalized Workspace-relative path with `/` separators as the temporary external `projectId`.
-- Reject absolute IDs, empty segments, `.`, `..`, and any resolved path outside the Workspace.
-- Keep the ID parsing in the discovery boundary so it can later be replaced by DB-backed internal IDs.
-- Apply common generated-directory exclusions to every type and keep Unity `Library`, `Temp`, `Logs`,
-  `UserSettings`, and related directories Unity-specific.
-- Block sensitive file-name patterns before reading content.
-- Keep the temporary maximum file size at 5MB.
-- Decode text as strict UTF-8; malformed input becomes an isolated read failure.
-- Resolve real paths before reading so symbolic links cannot escape a Project root.
-- Continue after one file read failure and after one Project metadata-scan failure.
-- Read Projects sequentially; do not add parallelism, Virtual Threads, or caching without measured need.
+- 초기 개발 작업공간은 `C:/workspace`, 기본 경로 공급자는 `WorkspaceProperties`다.
+- 실제 탐지/탐색은 `Path`를 받아 향후 DB 기반 경로 공급으로 교체할 수 있게 한다.
+- Java/Spring Boot, Unity, Node, .NET, Python은 명시적 marker로 판별하고 Git만으로 추정하지 않는다.
+- Container와 프로젝트를 분리한다. 직계 UNKNOWN에서만 한 단계 추가 탐지하고 알려진 루트 안은 탐지하지 않는다.
+- 외부 `projectId`는 `/`로 정규화한 작업공간 상대 경로다. 절대 ID·빈 요소·`.`·`..`·경계 밖 경로를 거부한다.
+- ID 해석을 탐지 경계에 두어 향후 내부 DB ID로 바꿀 수 있게 한다.
+- 공통 생성물 제외와 Unity의 `Library`, `Temp`, `Logs`, `UserSettings` 등 전용 제외를 구분한다.
+- 민감 파일명과 5 MB 상한을 검사한다. UTF-8 오류는 파일별 읽기 실패로 처리한다.
+- 읽기 전 실제 경로를 확인해 프로젝트 밖으로 나가는 심볼릭 링크를 거부한다.
+- 파일 하나/프로젝트 하나의 실패 이후에도 나머지를 처리한다. 순차 실행을 유지하고 측정 없는 병렬화·캐시를 추가하지 않는다.
 
-## Relative Project identifier
+## 상대 프로젝트 식별자
 
-Examples are `Local_Ai_Work`, `Room_Reservation/RoomReservation`,
-`Room_Reservation/room-reservation-front`, and `Toy_Sports_Day/toy_sports_day`.
+예: `Local_Ai_Work`, `Room_Reservation/RoomReservation`,
+`Room_Reservation/room-reservation-front`, `Toy_Sports_Day/toy_sports_day`.
+읽기 쉽고 작업공간 루트가 바뀌어도 상대 구조를 유지할 수 있으나 이동/이름 변경 시 ID도 바뀐다.
+절대 경로를 외부 식별자로 사용하지 않는다는 뜻이지 모든 응답에서 절대 경로를 숨긴다는 뜻은 아니다.
 
-The relative ID is readable, portable across the configured Workspace root, and avoids exposing an absolute path.
-Its tradeoff is that moving or renaming a Project changes the ID. A future DB model may replace it with a stable
-internal ID without changing the current path validation boundary.
+서버/프록시의 인코딩된 slash 처리 차이를 피하려고 단일 프로젝트 API는 ID를 query parameter로 받는다.
+기존 직계 이름 기반 URL도 호환을 유지한다. 향후 안정적인 DB ID를 도입할 여지는 남긴다.
 
-Canonical single-Project APIs accept the ID as a query parameter because encoded slash handling in URL path
-variables differs across servers and proxies. Existing direct-child name URLs remain compatible.
+## 회귀 검증
 
-## Failure isolation and security regression
+작업공간 경계, Project ID/파일 경로의 traversal, 실제 외부 심볼릭 링크, 민감 파일,
+제외 폴더, 5 MB, 잘못된 UTF-8, 파일/프로젝트 실패 격리, Container 제외,
+depth 1 탐지와 depth 2 제한, Unity 생성물 제외를 검증했다.
+모든 내부 링크 정책·경쟁 조건·본문 비밀값 방어를 증명한 테스트는 아니다.
 
-The regression suite covers Workspace boundary rejection, Project and file `..` traversal rejection, actual
-symbolic-link escape rejection, sensitive-file blocking, excluded directories, the 5MB limit, malformed UTF-8,
-per-file failure isolation, per-Project scan failure isolation, Container exclusion, depth-1 discovery, the
-depth-2 limit, and Unity generated-directory exclusion.
+## 당시 최종 기준값
 
-## Final baseline
+| 항목 | 값 |
+|---|---:|
+| 작업공간 메타데이터 탐색 | 3,978 ms |
+| 프로젝트 / Container | 12 / 2 |
+| 전체 / 포함 / 제외 파일 | 107,086 / 686 / 106,400 |
+| 대형 / 메타데이터 실패 / 실패 프로젝트 | 0 / 0 / 0 |
+| Local_Ai_Work 전체 읽기 | 73문서, 실패 0, 134,727 bytes, 82 ms |
 
-- Workspace metadata scan: 3,978 ms
-- Project roots: 12
-- Containers: 2
-- Total detected files: 107,086
-- Included files: 686
-- Excluded files: 106,400
-- Oversized files: 0
-- Metadata-failed files: 0
-- Failed Project scans: 0
-- `Local_Ai_Work` full Document read: 73 documents, 0 failures, 134,727 text bytes, 82 ms
+파일시스템 캐시, Git/빌드 생성물, 동시 디스크 작업에 따라 수와 시간이 달라지는 로컬 기준값이다.
 
-These figures are a local baseline, not a performance target. Filesystem cache state, Git/build artifacts, and other
-concurrent disk activity can change both counts and elapsed time between runs.
+## 포트폴리오 문제 해결 후보
 
-## Portfolio troubleshooting candidate
+실제 Unity 루트가 한 단계 아래여서 `Toy_Sports_Day`가 UNKNOWN이 됐다.
+`Library/Bee/1900b0aE.dag.json` 16,280,177 bytes가 `SKIPPED_TOO_LARGE`로 노출된 것이 단서였다.
+직계 폴더=프로젝트라는 가정을 고쳐 부모 Container/실제 Unity 루트를 분리하고 전용 제외를 적용했다.
 
-Symptom: `Toy_Sports_Day` was classified UNKNOWN because the real Unity root was one level lower. Without the
-Unity type, `Library` generated files entered the supported-file evaluation and
-`Library/Bee/1900b0aE.dag.json` appeared as a 16,280,177-byte `SKIPPED_TOO_LARGE` file.
+대형 후보는 1→0으로 줄었다. Step 9 직후 포함 파일은 8,614→680이며,
+이 종료 검증의 별도 시점에는 686개였다. 두 시점의 수치를 섞지 않는다.
+제외 파일도 메타데이터 집계에는 남는다. 병렬화 전에 수집 경계 오류를 해결한 사례다.
 
-Investigation: the original policy assumed every direct Workspace child was a Project root.
+## 당시 다음 단계
 
-Resolution: add bounded depth-1 Project-root discovery, classify `Toy_Sports_Day` as a Container, detect
-`Toy_Sports_Day/toy_sports_day` as UNITY, and apply the Unity exclusions at the correct boundary.
-
-Result: `SKIPPED_TOO_LARGE` changed from 1 to 0 and included files dropped from 8,614 to 686 while retaining
-metadata visibility for excluded files.
-
-This is a useful portfolio example because it connects a real data-quality/performance symptom to root-cause
-analysis, a bounded architecture change, regression tests, and a measurable before/after result.
-
-## Next phase boundary
-
-Phase 6 may consume only successful `WorkspaceDocument` values from this foundation. Chunking policy, chunk IDs,
-metadata inheritance, code-aware boundaries, re-index behavior, and token/character sizing remain undecided.
+성공한 `WorkspaceDocument`만 Phase 6 입력으로 사용하기로 했다.
+청크 정책·ID·메타데이터·코드 경계·재인덱싱·문자/토큰 단위는 후속 단계에서 결정했다.

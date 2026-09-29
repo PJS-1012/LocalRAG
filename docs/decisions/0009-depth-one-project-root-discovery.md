@@ -1,59 +1,54 @@
-# 0009. Depth-1 Project root discovery
+# 0009. 한 단계 중첩 프로젝트 루트 탐지
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Problem
+승인됨. 당시 탐색 비교 수치를 보존한 기록이다.
 
-Treating every direct child of the Workspace as a Project misclassifies wrapper folders such as
-`Room_Reservation` and `Toy_Sports_Day`. Their actual Project roots are one level lower, so framework-specific
-scan rules were not applied to the correct root.
+## 문제
 
-## Decision
+작업공간의 직계 폴더를 모두 프로젝트로 취급하면 `Room_Reservation`, `Toy_Sports_Day`처럼
+실제 루트가 한 단계 아래인 폴더를 잘못 분류한다. 타입별 정책도 잘못된 루트에 적용된다.
 
-Run the existing Project type detector on each direct Workspace child. A child with clear markers is a Project root
-and is not searched for more Projects. When it remains UNKNOWN, inspect only its immediate child directories and
-keep only candidates with clear Project markers.
+## 결정
 
-If at least one marked child exists, represent the direct folder as a separate `DetectedContainer` and return its
-marked children as independent `DetectedProject` roots. A Container is structural metadata and is never a scan or
-RAG target. If no marked child exists, retain the direct folder as UNKNOWN. Do not search below this one additional
-level.
+기존 타입 판별기를 직계 폴더에 먼저 적용한다. 알려진 marker가 있으면 루트로 확정하고 더 찾지 않는다.
+UNKNOWN일 때만 바로 아래 디렉터리를 한 번 검사하고 명확한 marker가 있는 자식만 채택한다.
 
-Keep Container separate from `ProjectType`. Adding CONTAINER to the enum would mix a non-Project structural folder
-into APIs whose enum values describe scannable Project technologies.
+자식 프로젝트가 하나 이상 있으면 부모는 `DetectedContainer`, 자식은 독립 `DetectedProject`로 반환한다.
+Container는 구조 메타데이터이며 Scan/RAG 대상이 아니다. 자식 marker도 없으면 부모를 UNKNOWN으로 남긴다.
+추가 한 단계보다 깊은 탐지는 하지 않는다.
 
-Scan a discovered Project through its resolved `DetectedProject.rootPath`. This avoids rebuilding the direct-child
-assumption inside the scanner and lets the configured Workspace remain only the discovery boundary/default source.
+Container를 `ProjectType` enum에 넣지 않는다. 탐색 가능한 기술 타입과 비프로젝트 구조를 섞지 않기 위해서다.
+Scanner는 `DetectedProject.rootPath`를 사용하고 직계 폴더라는 가정을 다시 만들지 않는다.
 
-## Common and framework-specific exclusions
+## 공통 정책과 Unity 정책
 
-The existing common exclusions already apply to every Project type, including UNKNOWN: `.git`, `.gradle`,
-`.idea`, `.vscode`, `node_modules`, `target`, `build`, `obj`, and `bin`.
+`.git`, `.gradle`, `.idea`, `.vscode`, `node_modules`, `target`, `build`, `obj`, `bin` 등 공통 제외는
+UNKNOWN을 포함한 모든 타입에 적용한다. `Library`는 다른 기술에서 정상 디렉터리일 수 있으므로
+Unity 전용으로 남긴다. 올바른 루트 탐지로 `toy_sports_day`에만 Unity 정책을 적용한다.
 
-Keep `Library` Unity-specific because that directory name can be legitimate in a non-Unity codebase. Correct
-Project-root discovery makes the nested `toy_sports_day` root UNITY, so its `Library` receives the Unity policy
-without weakening the boundary between common and framework-specific rules.
+## 실제 확인
 
-## Actual Workspace verification
+Container 2개, 탐색 가능한 프로젝트 루트 12개를 찾았다.
 
-The Workspace produced 2 Containers and 12 scannable Project roots.
-
-- `Room_Reservation`: `room-reservation-front` (NODE), `RoomReservation` (SPRING_BOOT), and
-  `RoomReservationBackendPractice` (SPRING_BOOT).
+- `Room_Reservation`: `room-reservation-front` (NODE), `RoomReservation` (SPRING_BOOT), `RoomReservationBackendPractice` (SPRING_BOOT).
 - `Toy_Sports_Day`: `toy_sports_day` (UNITY).
-- Direct roots `Local_Ai_Work` (SPRING_BOOT) and `DungeonMerchant` (UNITY) stayed unchanged and were not searched
-  recursively.
+- 직계 `Local_Ai_Work` (SPRING_BOOT), `DungeonMerchant` (UNITY)는 그대로 유지하고 내부를 추가 탐지하지 않았다.
 
-The metadata baseline changed from 10 Projects, 107,009 total files, 8,614 included files, 98,394 excluded files,
-and 1 oversized file to 12 Project roots, 106,990 total files, 680 included files, 106,310 excluded files, and no
-oversized files.
+| 항목 | 변경 전 | 변경 후 |
+|---|---:|---:|
+| 프로젝트 | 10 | 12 |
+| 전체 파일 | 107,009 | 106,990 |
+| 포함 | 8,614 | 680 |
+| 제외 | 98,394 | 106,310 |
+| 대형 파일 | 1 | 0 |
 
-The nested Unity scan excluded `Library`, `Logs`, `Temp`, and `UserSettings`. The previous
-`Library/Bee/1900b0aE.dag.json` oversized entry disappeared from the scan candidates.
+Unity의 `Library`, `Logs`, `Temp`, `UserSettings`를 제외했다.
+`Library/Bee/1900b0aE.dag.json`은 지원 파일 크기 검사 후보에서 빠졌다.
 
-## Remaining UNKNOWN folders
+## 남은 UNKNOWN
 
-`awsd`, `dragonball`, `Dungeon_Shop`, `untitled`, and `ValueSwap` remain UNKNOWN after the bounded
-depth-1 check. No framework is inferred from Git alone.
+`awsd`, `dragonball`, `Dungeon_Shop`, `untitled`, `ValueSwap`은 한 단계 확인 뒤에도 UNKNOWN이었다.
+Git만으로 프레임워크를 추정하지 않는다.

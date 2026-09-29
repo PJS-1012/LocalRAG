@@ -1,161 +1,67 @@
-# 0034 — Unified Chat, safe onboarding evidence, Korean-first UX
+# 결정 0034: 통합 채팅과 안전한 프로젝트 소개, 한국어 중심 화면
 
-- Date: 2026-09-22
-- Status: implementation and regression validation complete; answer-quality acceptance pending
-- Scope: connect existing capabilities; no push, new Agent Tool, model, retrieval algorithm or data migration.
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-## Problem
+일자: 2026-09-22. 당시 기능/회귀 검증은 완료했지만 답변 품질 승인 조건은 미달했다. 이후 0035에서 호출·근거 정책을 조정하고 0036에서 한계를 명시한 채 품질 개발을 종료했다. 아래 1,200토큰/재시도 정책은 당시 기록이지 현재 설정이 아니다.
 
-Users had to decide whether a natural-language question belonged to RAG, Agent, Progress or
-Activity. A broad Project question in the RAG page returned zero vector hits and stopped even
-though Git, README, build files and Project facts existed. English-first labels, tiny metadata
-and ambiguous Git status made this look like a stopped backend or broken language understanding.
-Backend READY already means usable; starting another backend cannot fix missing retrieval evidence.
+## 문제
 
-## Decisions
+사용자가 자연어 질문을 RAG·Agent·진행 상태·최근 작업 중 어디에 입력할지 먼저 결정해야 했다. RAG에서 검색 결과가 없으면 Git·README·빌드 파일이 있어도 프로젝트 소개를 멈췄다. 영문 표기, 작은 글씨와 모호한 Git 상태는 백엔드 중단이나 자연어 이해 실패처럼 보이게 했다. 백엔드 READY는 이미 사용 가능한 상태이며 추가 실행으로 검색 근거 누락을 해결할 수 없다.
 
-### One main chat, existing callbacks
+## 통합 진입점과 서비스 재사용
 
-`POST /api/workspaces/projects/chat/unified` is a new Project-scoped entry point. It uses the
-existing qwen Tool Calling registry; exact example-query matches and keyword intent chains are
-not used. The actual callbacks chosen are returned as routes, with GENERAL for verified-contract
-no-tool answers and UNRESOLVED for no-tool failures/withheld drafts.
+`POST /api/workspaces/projects/chat/unified`는 기존 qwen 도구 등록 구조로 프로젝트별 질문을 처리한다. 예시 질문 완전 일치나 키워드 분기 목록으로 의도를 결정하지 않는다. 실제 도구를 routes로 반환하고 도구 없는 정상 계약은 GENERAL, 실패/보류는 UNRESOLVED로 구분한다. 별도 라우팅 모델 호출은 매번 추가하지 않는다. 기존 RAG/Agent/진행 상태/최근 작업/오류 API는 유지한다.
 
-Ordinary requests have no separate router LLM round-trip. Existing Agent callbacks choose
-knowledge, Git, Progress, Activity, diagnosis or general knowledge. The Unified policy explains
-broad question decomposition and evidence limitations, but model compliance remains imperfect.
-Legacy RAG Chat, Agent, Progress, Activity and Error APIs remain available.
+- ProjectOverviewService.facts는 모든 환경 조회/모델 호출 없이 인덱스·자동화·오류 사실을 제공한다.
+- ProjectProgressService.collect와 DevelopmentActivityService.collect는 중간 요약 LLM 없이 수집만 재사용한다. 기존 분석/요약 API는 유지한다.
+- ErrorAnalysisService.reviewCollected는 수집한 근거를 재검증하고 두 번째 모델 호출이나 오류 이력 자동 저장을 하지 않는다.
+- 유사 오류/Git/Docker/DB/Ollama/로그 도구는 재사용하며 새 도구 이름은 추가하지 않는다.
+- 통합 채팅은 자동화 실행, 코드 변경, 복구, 진단 자동 저장을 수행하지 않는다.
 
-### Reuse without nested answer generation
+## 제한된 실제 파일 근거
 
-- `ProjectOverviewService.facts` returns existing index/automation/error facts without running
-  all environment probes or another model.
-- `ProjectProgressService.collect` and `DevelopmentActivityService.collect` reuse collection
-  logic without their own summary LLM. Their existing analyze/summarize paths are retained.
-- `ErrorAnalysisService.reviewCollected` applies the existing analysis validation to already
-  collected evidence without a second model call or automatic Error History persistence.
-- Existing Similar Error/Git/Docker/DB/Ollama/Log callbacks remain available. No Tool name is added.
-- Automation/History metadata is read through existing services; Unified Chat does not run
-  automation, mutate source, execute repairs, or save an error diagnosis automatically.
+기존 searchProjectKnowledge에 통합 채팅 전용 ProjectBrief 공급자를 연결하여 RAG, 안전한 파일 일부, 캐시된 탐색 메타데이터, 언어/프로젝트 사실을 결합한다. 인덱스나 검색 결과가 없어도 다른 근거를 사용할 수 있다. Git/개발 흐름 답변은 벡터 출처를 필수로 요구하지 않는다.
 
-### Bounded live Project evidence
+ProjectBriefService는 기존 탐지·탐색·문서 읽기를 재사용한다. 명시된 파일/클래스, README, 빌드 파일, 진입점, Controller, Service, Decision Log, Test 순으로 범주별 한 파일을 먼저 시도한다. 질문 의도 라우팅이 아닌 근거 파일 선택이다.
 
-The existing `searchProjectKnowledge` callback accepts a Unified-only ProjectBrief provider.
-It combines normal RAG with safe existing-file excerpts, cached scan metadata, languages and
-Project overview facts. A missing index or zero hits can therefore still produce useful evidence.
-Git and Workflow answers never require vector sources.
+당시 제한은 파일 시도 8개, 발췌당 1,400자, 본문 전체 6,000자, 관찰 경로 30개, 디렉터리/패키지 힌트 25개였다. 완전한 행 단위로 위치를 유지하며 RAG 8,000자 설정 자체는 변경하지 않았다. 전체 저장소 검토가 아닌 표본이므로 알파벳상 빠른 AdminController가 핵심 ReservationController보다 선택될 수 있다. 현재 발췌 제한은 후속 기록/구조 문서를 따른다.
 
-`ProjectBriefService` uses existing discovery, scanner and DocumentReader. Candidate selection
-prioritizes an explicitly named file/class, README, build file, entry point, Controller, Service,
-Decision Log and Test. This is evidence-file selection, not query intent keyword routing.
-One file per category is tried first, then remaining candidates.
+읽을 때마다 작업공간 경계·링크·제외/민감 파일·확장자·5 MB·UTF-8 정책을 다시 적용하고 모델 입력 전에 마스킹한다. 캐시가 읽기 권한을 부여하지 않는다. 채팅/소개 수집만으로 인덱스를 생성·변경하지 않는다.
 
-Limits: at most 8 file attempts, 1,400 characters per excerpt, 6,000 content characters overall,
-30 observed paths, 25 directory/package hints. Whole line prefixes preserve path/line references.
-These excerpts supplement, rather than change, the existing RAG 8,000-character context budget.
-They are samples, not a complete repository inspection. Selection may favor an alphabetically
-earlier AdminController over a more central ReservationController.
+## 근거와 실행 제한
 
-Every read reapplies Workspace boundary, link, excluded/sensitive file, extension, 5 MB and strict
-UTF-8 policy. Cached metadata is not authorization to read. Content is redacted before model input.
-No index is created or changed by opening chat or collecting a Project brief.
+출처 ID·경로·행, 마스킹된 도구 결과·이름·시간·상태·순서를 UI에 구분해 노출한다. Knowledge가 0개여도 프로젝트/환경/작업 근거를 볼 수 있다. 당시 호출 시도는 6회, 지식 호출은 2회로 제한하고 같은 인자는 요청 내 재사용했다. 재사용 기록도 추적하며 출처 ID 중복을 제거한다. 예산 초과를 무한 반복으로 해결하지 않는다.
 
-### Evidence and bounded execution
+초기 인수인계 응답은 도구 없이 Python/main.py를 만들어냈다. 당시 GENERAL 계약을 지키지 않은 프로젝트 답변을 보류하고 도구 선택을 한 번만 재시도했으며 반복 실패는 INSUFFICIENT_EVIDENCE였다. 이 재시도는 0035에서 제거했다. 모델이 붙이는 GENERAL 표시는 독립적인 의미 검증이 아니다.
 
-Knowledge sources retain citation IDs, paths and line ranges. Sanitized callback results, names,
-duration, success/failure and call sequence are exposed separately in the UI. Project evidence,
-runtime evidence and workflow evidence can be inspected even when Knowledge count is zero.
+thinking 활성 상태의 실제 넓은 질문이 120초를 초과해 당시 통합 채팅 thinking OFF와 `localrag.unified.max-output-tokens=1200`을 적용했다. 모델은 qwen3:8b이며 기존 검색 설정은 유지했다. 스트리밍/대화 기억은 추가하지 않았다. 현재 출력 상한은 650이다.
 
-Unified limits: 6 callback attempts, at most 2 knowledge calls, same-argument memoization.
-Repeated calls keep trace entries while reusing results; source IDs are deduplicated.
-Budget exhaustion fails explicitly instead of continuing an unbounded Tool loop.
+## 한국어 화면과 언어 통계
 
-An early handover answer invented Python/main.py without calling a Tool. Project-dependent
-no-tool drafts are now withheld unless the model follows the explicit GENERAL-only contract.
-An invalid no-tool draft triggers **one** additional Tool-selection attempt; repeated invalid
-output becomes INSUFFICIENT_EVIDENCE. This exceptional retry is not a second router on every query.
-The self-declared GENERAL marker is not independent semantic verification and is not a complete
-hallucination defense.
+메인 화면은 채팅, 기존 Agent/Knowledge는 고급 화면으로 배치했다. 대시보드·설정·시작·상세·공통 상태는 한국어로 바꾸되 식별자는 유지했다. 당시 일부 고급 제어와 진단 원문은 영어가 남았다.
 
-An initial real-model broad request exceeded 120 seconds with thinking enabled. Unified calls
-now use thinking OFF and `localrag.unified.max-output-tokens=1200`; the model remains qwen3:8b.
-Legacy generation paths and retrieval settings are unchanged. Long responses can still hit this
-output bound; streaming and conversation memory remain out of scope.
+Enter 전송, Shift+Enter 줄바꿈, 한글 조합 중 전송 방지, 빈 입력/중복 전송 차단을 적용했다. 프로젝트 변경 시 결과를 초기화하며 대화 기억은 없다. 작업 트리 변경 여부와 upstream 동기화 상태를 분리하고 변경/신규/삭제 수는 같은 porcelain 출력에서 얻는다. 자동 fetch는 하지 않는다.
 
-### Korean-first frontend
+메타데이터 최소 14px, 해시 15px, 구역 제목 18px, Segoe UI/Malgun Gothic 글꼴과 내부 스크롤·경로 줄바꿈·제한된 JSON 표시를 사용한다. 복사는 전체 해시를 유지한다.
 
-Main navigation is 채팅; previous Agent/Knowledge pages remain advanced views.
-Dashboard, Settings, Startup, Project detail and common status labels use Korean while technical
-identifiers remain unchanged. General page headings were localized; some advanced controls and
-raw diagnostic evidence still use English.
+ProjectMetadataService는 내용/행을 읽지 않는 탐색 메타데이터를 재사용한다. 언어 비율은 적격 소스 파일 수 기준이지 코드 줄 수가 아니다. Java/Kotlin/C#/C++/C/JS/TS/Python/PHP/SQL/HTML/CSS/YAML/Rust를 구분한다. RAG가 읽지 못하는 언어도 메타데이터 집계에는 포함될 수 있지만 읽기 허용 확장자를 넓히지 않는다. 민감 이름·제외 패턴·생성 폴더·대형 파일은 제외한다.
 
-Enter submits, Shift+Enter inserts a line break. IME composition, empty input and in-flight
-duplicate submission are guarded across the chat forms. Project changes reset the chat result.
-Answers remain single-turn; no conversation memory was added.
+`localrag.overview.metadata-cache-ttl=PT5M`, 최대 프로젝트 64개, 루트+유형 키의 순차 메타데이터 캐시를 사용한다. 재사용 시 내용 탐색/LLM은 없지만 탐지/Git/DB 비용은 남고 만료되면 다시 탐색한다. 13개 프로젝트 요약을 한 번에 반환하며 상세 확장은 추가 요청이 없다.
 
-Working tree (변경 없음 / 수정된 파일 있음 / Git 저장소 아님) and upstream synchronization
-(Push 완료 / 미Push / ahead / behind / no upstream) are displayed separately.
-Modified/new/deleted counts use the same porcelain output, not another Git command.
-Remote information uses local upstream refs without fetch and may be stale.
+## 당시 검증과 한계
 
-Metadata is at least 14 px; commit hashes are 15 px; section titles are 18 px. Segoe UI /
-Malgun Gothic replaces the hard-to-read status typography. Lists have internal scrolling,
-path wrapping and bounded evidence JSON. Commit copying keeps the full hash.
+- 백엔드 190개 중 189 통과/선택 실행 1개 제외/실패·오류 0. 프런트엔드 10파일 26개, Rust 10개 통과. Java 17 유지.
+- Vite, 실행 JAR, Tauri, NSIS 빌드 성공.
+- 실제 WebView에서 13행, 14px 메타데이터, 한국어, Git 상태 분리, 상세 추가 요청 0, Enter→실제 Git 답변, 1440×1000 가로 넘침/콘솔 오류 0.
+- 화면 제어 초기화 실패로 기존 개발용 배포 WebView 점검기를 사용했으며 제품 브라우저/MCP 기능을 추가한 것은 아니다.
+- 실제 질문 15개: **PASS 4 / PARTIAL 10 / FAIL 1**. [질문별 평가](../unified-chat-evaluation.md).
+- 답변 7개에서 Knowledge 인용이 누락됐다. 나타난 ID가 유효하더라도 주장별 의미 정확성이 입증되는 것은 아니다.
+- 넓은 질문/인수인계에 Knowledge만 선택하거나, 기록된 미완료 작업이 없음을 미완료 없음으로 단정하거나, 커밋을 검증된 완료로 해석했다. DB 진단에서 DB 도구를 선택하지 않은 사례도 있다.
 
-### Cheap language statistics
+## 당시 성능과 결론
 
-`ProjectMetadataService` reuses a metadata scan plan, not content/line reads. Language ratios
-are **eligible source file counts**, not source LOC. The denominator and basis are explicit.
-The map covers Java/Kotlin/C#/C++/C/JS/TS/Python/PHP/SQL/HTML/CSS/YAML/Rust.
-Known language extensions unsupported for RAG may contribute metadata counts only; this does
-not expand readable/indexable extensions. Sensitive names, excluded patterns, generated folders
-and oversized files are omitted.
+13개 프로젝트 요약: 콜드 클라이언트 11,183 ms/서버 10,961 ms, 웜 3,128/3,116 ms. RoomReservation 적격 언어 파일 114개: Java 82.5%, JS 8.8%, YAML 6.1%, SQL 2.6%. 질문 15개 평균 도구 849.67 ms, LLM 23,967.73 ms, 전체 24,817.40 ms, 범위 7.116~54.896초였다. 파일 캐시·모델 상주·CPU/GPU 부하·생성 결과에 따라 달라지며 콜드 요약은 여전히 느렸다.
 
-Cache: `localrag.overview.metadata-cache-ttl=PT5M`, maximum 64 Project snapshots, sequential
-metadata collection. Root + Project type is the cache key. A warm Dashboard does not rescan
-content or invoke LLM. Discovery/Git/DB metadata still cost time; cache expiration can rescan.
-The Workspace summary returns all 13 Projects in one response. Detail expansion uses that
-response and issues no new per-Project request.
+당시 남긴 문제는 확인 불가/빈 값 구분, 완료 주장 제한, 넓은 질문의 상태 근거 확보, 의미 있는 인용, 선택 프로젝트 DB와 LocalRAG DB 구분, 느린 메타데이터/Git 조회, 고급 화면 번역/Markdown 표시였다. 기능 연결은 완료했지만 품질 조건 전체 통과는 아니며 반복 평가로 이를 숨기지 않았다.
 
-## Validation and observed limitations
-
-- Backend: 190 tests, 189 passed, 1 opt-in live evaluation skipped, 0 failed/errors.
-- Frontend: 26 passed in 10 files. Rust: 10 passed. Java 17 maintained.
-- Vite production, executable JAR, Tauri release and NSIS builds validated.
-- Production WebView: 13 rows, 14 px metadata, Korean labels, correct Git separation,
-  Project detail zero additional requests, Enter-to-real-Git answer, zero console errors,
-  no horizontal overflow at 1440 x 1000.
-- Native computer-use runtime could not initialize; used the existing developer-only release
-  WebView smoke harness. This is not a new product browser/MCP integration.
-- Real 15-query results: **4 PASS / 10 PARTIAL / 1 FAIL**. Full per-query evidence review and
-  timings: [evaluation](../unified-chat-evaluation.md).
-- Seven answers omitted Knowledge citations; IDs that did appear were valid, which does not
-  prove claim-level semantic correctness.
-- Broad/current-state and handover questions sometimes select Knowledge only. Progress lists
-  with no recorded tasks are incorrectly summarized as no unfinished work. Commit messages are
-  sometimes promoted to verified completion. DB diagnosis did not select the database Tool.
-- Therefore feature integration is complete, but all answer-quality acceptance criteria are
-  **not** met. No repeated model sampling is used to conceal these limitations.
-
-## Performance baseline
-
-13-Project overview: cold 11,183 ms client / 10,961 ms server; warm 3,128 / 3,116 ms.
-RoomReservation languages: 114 recognized eligible files; Java 82.5%, JS 8.8%, YAML 6.1%, SQL 2.6%.
-15-query average: Tool 849.67 ms, LLM 23,967.73 ms, total 24,817.40 ms.
-Range 7.116–54.896 seconds. Cold overview remains noticeably slow.
-Filesystem cache, model residency, CPU/GPU load and sampling affect subsequent runs.
-
-## Backlog / closure
-
-1. Enforce unknown-versus-empty Workflow semantics and reject unsupported completion claims.
-2. Ensure broad/handover answers collect needed status evidence, not only architecture samples.
-3. Improve claim-level citation coverage without replacing citations with decorative IDs.
-4. Distinguish selected Project DB from LocalRAG infrastructure in diagnosis, and collect only
-   relevant available evidence.
-5. Profile cold metadata/Git collection if user-visible latency remains unacceptable.
-6. Complete advanced-view localization and improve plain Markdown answer presentation separately.
-
-No Hybrid Search, BM25, reranker, source weighting, HNSW, new model, threshold changes,
-new Agent Tool, multi-agent, MCP, UI memory or streaming was introduced. Quality closure remains
-pending; this decision log records the partial outcome rather than declaring all UX goals passed.
-Logical local commits are allowed by the request. Push remains prohibited.
+Hybrid Search/BM25/재정렬/가중 검색/HNSW/새 모델·도구/다중 에이전트/MCP/대화 기억/스트리밍은 추가하지 않았다. 이 시점에는 로컬 커밋만 허용되고 push는 금지됐다. 현재 종료 상태는 0036을 따른다.

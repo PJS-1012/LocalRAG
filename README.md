@@ -4,6 +4,10 @@ LocalRAG는 PC 전체를 무작정 AI에 넣지 않고, 지정된 작업공간 �
 안전하게 탐색·인덱싱하는 로컬 개발 도우미입니다.
 코드 검색, 근거 기반 답변, 읽기 전용 환경 진단과 개발 진행 상황 분석을 제공합니다.
 
+문서 갱신: 2026-09-29. 기능 코드 기준은 `f607670`(2026-09-28)입니다.
+기능·품질 개발은 남은 한계를 기록하고 종료했습니다. 테스트 통과나 API의 `SUCCESS`는
+모든 답변의 정확성을 보장하지 않습니다.
+
 ## 만든 이유
 
 로컬 개발 환경의 지식은 코드, 문서, Git, 컨테이너, 로그와 오류 이력에 흩어져 있습니다.
@@ -83,10 +87,16 @@ CLEAN/DIRTY는 파일 변경 여부이며, PUSHED/UNPUSHED와 ahead/behind는 �
 주요 언어 비율은 제외 정책을 통과한 **소스 파일 수** 기준이며 코드 줄 수 비율이 아닙니다.
 메타데이터는 기본 5분 캐시를 사용합니다. 상세를 여는 동작에는 추가 프로젝트 API 요청이 없습니다.
 
-실제 15개 질문 평가: **통과 4 / 부분 통과 10 / 실패 1**. 현재 일부 답변은 인용을
-누락하거나, 기록되지 않은 미완료 작업을 없다고 단정합니다. 기능 연결은 완료했지만 답변 품질의
-완전한 종료를 선언하지 않습니다. 상세 결과는 [평가 보고서](docs/unified-chat-evaluation.md),
-설계는 [설계 결정 기록 0034](docs/decisions/0034-unified-chat-onboarding-korean-ux.md)에 기록했습니다.
+2026-09-22의 질문 15개 평가는 **통과 4 / 부분 통과 10 / 실패 1**이었습니다.
+이후 근거 선택·모델 호출을 조정했고, 09-28에는 종료 여부를 확인할 수 없는 응답을
+`LLM_FAILED`, 확보한 근거에 없는 클래스·파일 설명을 `INSUFFICIENT_EVIDENCE`로 보류하도록
+보완했습니다. 한국어 조사가 붙은 클래스명도 검사합니다. 이 검사는 어휘 기반 방어이지
+주장 전체의 의미 검증은 아닙니다.
+
+최종 질문 5개에서는 Unity 생성 중단과 Spring 설명의 일부 의미 오류, 일반 지식 오류가
+남았습니다. 이를 해결됐다고 보지 않고 개발을 종료했습니다. 과거 결과는
+[통합 채팅 평가](docs/unified-chat-evaluation.md), 마지막 검증과 한계는
+[최종 품질 기록](docs/decisions/0036-final-quality-guards-and-release.md)에 있습니다.
 
 ## 개발 환경 설정
 
@@ -95,6 +105,7 @@ CLEAN/DIRTY는 파일 변경 여부이며, PUSHED/UNPUSHED와 ahead/behind는 �
 
 ```powershell
 cd frontend
+npm ci
 npm run desktop:dev
 npm run desktop:build
 ```
@@ -137,6 +148,9 @@ Tauri 데스크톱 앱 -> React/Vite 화면
 | 검색 질문 | 검색용 지침 기본 적용, 원문 질문 모드로 전환 가능 |
 | RAG 근거 문맥 | 출처 헤더 포함 최대 8,000자, 청크 중간 절단 없음 |
 | RAG 전용 답변 | `qwen3:8b`, 출처 인용, 검색 근거가 없으면 LLM 호출 생략 |
+| 통합 채팅 모델 설정 | thinking OFF, 온도 0, 문맥 창 8,192토큰, 출력 최대 650토큰 |
+| 통합 채팅 호출 | 일반 지식은 보통 1회, 도구 사용 시 계획 1회 + 도구 스키마 없는 최종 생성 1회; HTTP 재시도는 별도 |
+| 통합 채팅 근거 | 최대 출처 6개, 파일당 비중첩 구간 2개, 본문·경로 약 6,500자 예산 |
 
 통합 채팅은 위 검색 외에도 실제 파일·실행 상태·작업 이력을 사용합니다. RAG 전용 API와
 통합 채팅의 근거 부족 처리 방식은 다릅니다.
@@ -150,6 +164,22 @@ Tauri 데스크톱 앱 -> React/Vite 화면
 - Agent 도구는 읽기 전용이며 출력 크기·실행 시간 제한과 민감 정보 마스킹 적용
 - 검색된 텍스트·Git 커밋 메시지·로그는 명령이 아닌 신뢰하지 않는 근거 자료로 취급
 - 자동화는 코드·Git·서비스 상태를 변경하지 않음
+
+이는 현재 구현한 방어 범위이며 인증된 다중 사용자 서비스나 완전한 파일시스템 샌드박스는
+아닙니다. 파일 교체 경쟁, 모든 비밀 형식, 인용의 의미 정확성까지 보장하지 않습니다.
+부분 읽기 실패 후 재인덱싱의 오래된 행 정리 위험 등 코드상 한계는
+[사실 검증 문서](docs/portfolio-facts-audit.md)에 구분해 기록했습니다.
+
+## 최종 테스트·배포 기록 — 2026-09-28
+
+- 백엔드: 215개 중 214개 통과, 선택 실행 실제 모델 테스트 1개 제외, 실패 0
+- 프런트엔드: 43개 통과; Rust: 10개 통과
+- 백엔드 JAR·Vite·Tauri 실행 파일·NSIS 설치 파일 재빌드
+- 배포 해시 기록: `build/release-20260928-manifest.json`(Git 제외)
+- 대표 질문 5개만 검증했으며 답변 품질 전체 통과로 집계하지 않음
+
+이번 문서 정리에서는 코드나 배포본을 변경하지 않았고 테스트를 다시 실행하지 않았습니다.
+상세는 [배포 점검표](docs/release-checklist.md)를 참고하세요.
 
 ## 기존 배포판 측정 기준값
 
@@ -171,10 +201,13 @@ Tauri 데스크톱 앱 -> React/Vite 화면
 ## 기술 구성
 
 - Java 17, Spring Boot 3.5.16, Spring AI 1.1.8, Gradle 8.14.3
-- React 19, TypeScript 5.9, Vite 7, Tauri 2.11, Rust 1.98
+- React 19, TypeScript 5.9, Vite 7, Tauri 2.11, Rust 2021 edition
 - PostgreSQL 17, pgvector 0.8.6, Flyway V1–V6
 - Ollama, qwen3:8b, qwen3-embedding:0.6b
 - Docker Compose, Testcontainers, JUnit 5, Vitest
+
+Rust의 `rust-version = 1.77.2`는 매니페스트에 선언된 최소 버전이고, 과거 빌드에 사용한
+컴파일러 버전과는 다릅니다. 실제 의존성 해석 버전은 각 lockfile을 따릅니다.
 
 ## 테스트 실행
 
@@ -199,7 +232,11 @@ npm run desktop:build
 ## 알려진 한계
 
 - 벡터 검색만 사용하므로 DB 마이그레이션·문서가 구현 코드보다 상위에 노출되는 사례가 있습니다.
-- 실제 qwen 응답은 환경에 따라 약 15–50초가 걸릴 수 있습니다.
+- 로컬 모델 지연은 질문·근거·모델 준비 상태에 따라 크게 달라집니다. 09-22의 15개 질문은
+  7.116–54.896초, 09-28의 5개는 1.874–14.683초였지만 질문 집합이 다르고 생성 실패도 포함되어
+  단순한 속도 개선율로 비교할 수 없습니다.
+- 정상 종료 응답도 의미 오류나 잘못된 일반 지식을 포함할 수 있습니다. 불완전 응답과
+  근거 밖 심볼을 보류하는 방어가 생성 중단의 원인이나 모든 환각을 해결한 것은 아닙니다.
 - 2026-09-18 배포 화면에서 Agent Git 답변과 도구 실행 기록을 모두 확인했습니다.
 - UI와 Tauri 창의 최소 너비는 720px입니다.
 - 외부 Java 17 설치가 필요하며, jlink 기반 Java 실행 환경 동봉은 보류했습니다.
@@ -218,8 +255,12 @@ npm run desktop:build
 ## 관련 문서
 
 - [시스템 구조](docs/architecture.md)
+- [포트폴리오 사실·근거 조사](docs/portfolio-facts-audit.md)
 - [포트폴리오 주요 성과](docs/portfolio-highlights.md)
 - [면접용 개발 사례](docs/interview-stories.md)
 - [배포 점검표](docs/release-checklist.md)
 - [Phase 10 측정 결과](docs/phase10-portfolio-metrics.md)
 - [통합 채팅 품질 평가](docs/unified-chat-evaluation.md)
+- [오류 분석 평가](docs/phase8-step1-evaluation.md)
+- [유사 오류·개발 흐름 평가](docs/phase8-step3-5-evaluation.md)
+- [전체 설계 결정 기록](docs/decisions/)

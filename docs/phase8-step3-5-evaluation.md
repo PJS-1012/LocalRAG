@@ -1,63 +1,43 @@
-# Phase 8 Steps 3-5 evaluation (2026-09-11)
+# Phase 8 Step 3~5 평가 — 2026-09-11
 
-## Error similarity baseline
+과거 평가 기록이다. 현재 기능/배포 기준은 [시스템 구조](architecture.md)와 [배포 점검표](release-checklist.md)를 따른다.
 
-One real `qwen3-embedding:0.6b` batch was evaluated; no repeated threshold tuning was done.
+## 유사 오류 기준값
 
-| Comparison | Cosine similarity | Threshold 0.65 |
+실제 qwen3-embedding:0.6b 한 배치만 평가했고 임계값 튜닝을 반복하지 않았다.
+
+| PostgreSQL 접속 거부와 비교 | 코사인 유사도 | 임계값 0.65 |
 | --- | ---: | --- |
-| PostgreSQL refusal paraphrase | 0.8380 | included |
-| PostgreSQL refusal vs authentication failure | 0.7713 | included |
-| PostgreSQL refusal vs Redis refusal | 0.6095 | excluded |
-| PostgreSQL refusal vs Kafka missing topic | 0.4923 | excluded |
-| PostgreSQL refusal vs NullPointerException | 0.4689 | excluded |
+| 같은 의미의 다른 표현 | 0.8380 | 포함 |
+| PostgreSQL 인증 실패 | 0.7713 | 포함 |
+| Redis 접속 거부 | 0.6095 | 제외 |
+| Kafka 토픽 누락 | 0.4923 | 제외 |
+| NullPointerException | 0.4689 | 제외 |
 
-The integration scenario ranks the paraphrased PostgreSQL case first, rejects the sampled
-NullPointerException, filters an identical vector belonging to another Project, exposes a
-RESOLVED solution, hides unverified cause/solution, refreshes after VERIFIED, skips an
-unchanged fingerprint and redacts the query before embedding.
+통합 검증은 의미가 같은 PostgreSQL 사례를 첫 순위에 두고 표본 NPE를 제외했다. 다른 프로젝트의 동일 벡터 차단, RESOLVED 해결 내용 표시, 미검증 원인/해결 숨김, VERIFIED 후 갱신, 동일 지문 생략, 임베딩 전 질문 마스킹도 확인했다.
 
-## Actual LocalRAG service evaluation
+## 실제 LocalRAG 서비스
 
-Progress returned SUCCESS with five recorded commits, one in-progress working-tree item,
-one documentation-sync candidate, one explicit unknown and zero unresolved Error History
-rows. Nine evidence items were returned. At evaluation time 66 uncommitted paths were
-observed. The first direct run preceded the path-evidence enhancement, so its narrative
-described the committed Phase 7 baseline plus current uncommitted work rather than asserting
-all Phase 8 work complete. No test state was invented.
+진행 상태는 SUCCESS, 기록된 커밋 5개, 진행 중 변경 항목 1개, 문서 동기화 후보 1개, 확인 불가 1개, 미해결 오류 0개, 근거 9개였다. 당시 미커밋 경로는 66개였다. 첫 직접 실행은 경로 근거 개선 전이므로 설명은 커밋된 Phase 7과 현재 변경을 구분했으며 Phase 8 전체 완료나 테스트 상태를 만들어내지 않았다.
 
-Recent Summary returned five commits, a dirty working tree and no retrieved Decision Log
-source. Its original changed-area output exposed excessive filename-level granularity; the
-classifier was corrected to package-level grouping without rerunning the real model.
-The model returned English despite the Korean system instruction. This is a quality backlog,
-not a structural failure and was not prompt-tuned/retried.
+최근 작업은 커밋 5개, 수정된 작업 트리, 검색된 Decision Log 없음이었다. 변경 영역이 파일명 단위로 지나치게 잘게 나뉘어 패키지 단위로 수정했지만 모델을 재실행하지 않았다. 한국어 지침에도 영어로 답한 문제는 구조 실패가 아닌 품질 한계로 남기고 프롬프트 튜닝/재시도를 하지 않았다.
 
-Artifacts from the direct API run are under
-`build/reports/developer-workflow-actual/` (generated, not committed).
+직접 API 원본은 Git 제외 `build/reports/developer-workflow-actual/`에 있다.
 
-## One-shot qwen Tool selection
+## 실제 qwen 도구 선택 — 사례별 1회
 
-Artifacts:
-`build/reports/developer-workflow-live/2026-09-11T11-25-05.120656100Z/`.
+원본: `build/reports/developer-workflow-live/2026-09-11T11-25-05.120656100Z/`.
 
-| Case | Tool selection | Wall time | Result |
+| 질문 유형 | 선택 도구 | 전체 시간 | 결과 |
 | --- | --- | ---: | --- |
-| Similar past error | findSimilarErrors only | 53,169 ms | selection PASS; prose FAIL |
-| Current progress | analyzeProjectProgress only | 49,140 ms | PASS |
-| Recent work | summarizeRecentDevelopment only | 33,091 ms | PASS |
-| DB running | getDatabaseStatus only | 32,332 ms | PASS |
-| Java HashMap | none | 22,727 ms | PASS |
+| 과거 유사 오류 | findSimilarErrors만 | 53,169 ms | 선택 PASS, 설명 FAIL |
+| 현재 진행 상태 | analyzeProjectProgress만 | 49,140 ms | PASS |
+| 최근 작업 | summarizeRecentDevelopment만 | 33,091 ms | PASS |
+| DB 실행 여부 | getDatabaseStatus만 | 32,332 ms | PASS |
+| Java HashMap | 없음 | 22,727 ms | PASS |
 
-All cases completed and their child processes terminated under the 90-second limit.
-The Similar fixture represented an empty bounded result. qwen incorrectly claimed this
-meant the error had never occurred, speculated about other subsystems, and recommended more
-Tools. The deterministic Tool selection and response boundary are correct, but the prose is
-not accepted as evidence. The controlled fixture count was corrected for future runs; this
-evaluation was not repeated.
+모두 90초 이내에 자식 프로세스까지 종료했다. 유사 오류 표본은 제한된 빈 결과였는데 모델은 과거에 전혀 발생하지 않았다고 단정하고 다른 시스템을 추측하며 추가 도구를 제안했다. 도구 선택/응답 경계는 맞아도 설명을 근거로 인정하지 않는다. 향후 실행용 표본 건수는 수정했지만 이번 평가는 반복하지 않았다.
 
-## Automated regression
+## 자동 회귀
 
-The complete Java 17 suite produced 56 test suites, 159 passed tests, one skipped opt-in
-legacy live test and zero failures. Coverage includes Project isolation, secret redaction,
-optimistic locking and audit regression, RAG, Git, Environment, Logs, Error History,
-similarity indexing/search, workflow evidence and Agent callback routing.
+Java 17 전체 56개 묶음, 159 통과, 선택 실행 기존 실제 모델 테스트 1개 제외, 실패 0이었다. 프로젝트 격리, 마스킹, 낙관적 잠금/감사, RAG, Git, 환경, 로그, 오류 이력, 유사 오류 인덱싱/검색, 개발 흐름 근거와 Agent 도구 연결을 포함한다.

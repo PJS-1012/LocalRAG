@@ -1,67 +1,55 @@
-# Decision 0014: Project cosine similarity search baseline
+# 0014. 프로젝트 코사인 유사도 검색 기준
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted for Phase 6 Step 4. Threshold 0.50 remains the implemented initial baseline; evaluation recommends testing
-0.45 next rather than treating either value as final.
+## 상태
 
-## Decision
+Phase 6 Step 4 당시 승인 기록이다. 이 단계의 초기 임계값은 0.50이며
+이후 [0015](0015-similarity-threshold-045.md)에서 0.45를 채택했다.
 
-- Embed the user Query with the configured Ollama embedding model and validate it against the configured 1024
-  dimensions before querying PostgreSQL.
-- Restrict every SQL query with `project_id = ?`.
-- Use pgvector cosine distance (`<=>`) and expose `1 - cosine_distance` as similarity.
-- Apply threshold filtering, similarity-descending ordering, and Top-K limiting in PostgreSQL.
-- Default to Top-K 5 and threshold 0.50 through configuration, with a maximum accepted Top-K of 20.
-- Return Chunk content and citation-ready source metadata, never the vector.
-- Keep sequential exact search. With 208 stored Chunks, HNSW and IVFFlat are not justified yet.
+## 결정
 
-## Retrieval evaluation
+질문을 설정된 Ollama 모델로 임베딩하고 1024차원을 검증한 뒤 PostgreSQL을 조회한다.
+모든 SQL에 `project_id = ?`를 적용하고 `<=>` 코사인 거리의 `1 - cosine_distance`를 유사도로 반환한다.
+DB에서 임계값 필터·유사도 내림차순·Top-K를 적용한다. 당시 기본 Top-K 5, 임계값 0.50,
+허용 Top-K 최대 20이었다. 벡터 대신 청크 내용과 출처 메타데이터를 반환한다.
+208청크 규모에서 exact 검색부터 검증하고 HNSW/IVFFlat은 사용하지 않았다.
 
-The Project was reindexed before evaluation: 125 Documents, 208 Chunks, 208 stored, 1024 dimensions. Ten Queries
-were executed at threshold 0.50. A diagnostic threshold 0.0 run captured the unfiltered Top-5 distribution. Small
-differences between repeated scores are expected because each run requests a new Query embedding.
+## 당시 검색 평가
 
-| # | Query | Diagnostic Top-1 / Top-5 | Top result and judgment | At 0.50 |
+평가 전 125문서/208청크/1024차원으로 재인덱싱했다. 10질문을 0.50에서 실행하고,
+진단용 threshold 0.0으로 필터 전 Top-5 분포를 확인했다. 재호출마다 질문 임베딩을 생성하므로
+점수에 작은 차이가 생길 수 있다.
+
+| # | 질문 | 진단 Top-1 / Top-5 | 상위 결과와 판단 | 0.50 결과 수 |
 |---|---|---:|---|---:|
-| 1 | 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 0.637 / 0.552 | `ProjectType.java`, relevant; detector ranked third | 5 |
-| 2 | 민감 파일을 어떻게 제외하나? | 0.379 / 0.332 | `ProjectFileScanner.java`, relevant | 0 |
-| 3 | 문서를 어떤 기준으로 Chunk로 나누나? | 0.625 / 0.562 | `DocumentChunker.java`, relevant | 5 |
-| 4 | 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 0.593 / 0.474 | vector migration was irrelevant Top-1; relevant `EmbeddingService.java` ranked fifth at 0.474 | 2 |
-| 5 | 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0.464 / 0.419 | Decision 0013, relevant | 0 |
-| 6 | Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 0.521 / 0.485 | workspace scan decision, relevant semantic match | 3 |
-| 7 | Kafka consumer 설정은 어디에 있나? | 0.383 / 0.348 | no matching feature; all results irrelevant | 0 |
-| 8 | Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | 0.343 / 0.315 | Phase 5 security decision, relevant but weak | 0 |
-| 9 | 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 0.635 / 0.530 | `ProjectDocumentReaderTest.java`, relevant | 5 |
-| 10 | 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 0.542 / 0.477 | depth-one discovery decision, relevant | 2 |
+| 1 | 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 0.637 / 0.552 | ProjectType.java 관련, detector 3위 | 5 |
+| 2 | 민감 파일을 어떻게 제외하나? | 0.379 / 0.332 | ProjectFileScanner.java 관련 | 0 |
+| 3 | 문서를 어떤 기준으로 Chunk로 나누나? | 0.625 / 0.562 | DocumentChunker.java 관련 | 5 |
+| 4 | 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 0.593 / 0.474 | 비관련 vector migration 1위, 실제 EmbeddingService.java 5위(0.474) | 2 |
+| 5 | 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0.464 / 0.419 | 설계 기록 0013 관련 | 0 |
+| 6 | Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 0.521 / 0.485 | 작업공간 탐색 결정 기록, 의미상 관련 | 3 |
+| 7 | Kafka consumer 설정은 어디에 있나? | 0.383 / 0.348 | 해당 기능 없음, 결과 모두 비관련 | 0 |
+| 8 | Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | 0.343 / 0.315 | Phase 5 보안 기록, 관련하지만 점수 낮음 | 0 |
+| 9 | 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 0.635 / 0.530 | ProjectDocumentReaderTest.java 관련 | 5 |
+| 10 | 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 0.542 / 0.477 | 한 단계 루트 탐지 기록 관련 | 2 |
 
-### Threshold findings
+## 임계값 관찰
 
-- False negatives at 0.50: sensitive-file filtering, reindex synchronization, Workspace boundary protection, the
-  actual Embedding service, and lower-ranked nested discovery implementation.
-- False positives at 0.50: the vector-extension migration outranked text-to-vector implementation; a controller test
-  containing the evaluation wording also passed for Project detection.
-- The nonexistent Kafka Query peaked at 0.383 and was fully filtered.
-- The reindex and Embedding implementation matches fall between 0.45 and 0.50. Lowering the next evaluation baseline
-  to 0.45 should recover them while still filtering the observed Kafka results.
-- Lowering near 0.38 is not recommended: relevant sensitive-file results and the nonexistent Kafka distribution
-  overlap there. Threshold alone cannot resolve that ambiguity.
-- Recommendation: retain Top-K 5, test threshold 0.45 next, and separately evaluate query instructions and corpus
-  effects before considering a lower global threshold. Do not change the configured 0.50 without approval.
+- .50에서 민감 파일·재인덱싱·작업공간 경계·실제 Embedding 서비스·하위 중첩 탐지 구현이 누락됐다.
+- vector 확장 Migration과 질문 문구를 가진 Controller 테스트가 실제 구현보다 높거나 비관련인데 통과했다.
+- Kafka 최고점 .383은 모두 제외됐다.
+- .45~.50의 재인덱싱/Embedding 결과를 복구하려고 다음 평가에서 .45를 제안했다.
+- .38 부근은 민감 파일 관련 점수와 Kafka 비관련 분포가 겹쳐 추가 하향을 추천하지 않았다.
+- Top-K 5를 유지하고 threshold와 query instruction/corpus 효과를 분리하기로 했다. 당시 승인 전 .50 설정은 바꾸지 않았다.
 
-## Performance baseline
+## 당시 성능
 
-Across ten threshold-0.50 searches after warm-up:
+준비된 모델로 .50 검색 10회: 질문 임베딩 27~39 ms(평균 30.6), DB 2~25 ms(평균 12.9),
+전체 31~63 ms(평균 45.2). 필수 타입 질문은 41 ms/5건이었다.
+모델 준비·파일/DB 캐시·부하에 따라 달라진다.
 
-- Query embedding: 27-39 ms, average 30.6 ms.
-- DB similarity search: 2-25 ms, average 12.9 ms.
-- Total: 31-63 ms, average 45.2 ms.
-- Required Project-type Query: 41 ms total and five results.
+## 실패 상태
 
-These values vary with Ollama warm-up, filesystem and database cache, and machine load.
-
-## Failure behavior
-
-Blank or invalid requests, missing Project indexes, provider/model failures, dimension mismatches, and database
-failures have distinct response statuses. A valid search with no result above threshold returns `SUCCESS` with an
-empty result list.
+잘못된 요청, 인덱스 없음, 공급자/모델 실패, 차원 불일치, DB 실패를 구분한다.
+유효한 검색의 임계값 이상 결과가 0개이면 `SUCCESS`와 빈 목록을 반환한다.

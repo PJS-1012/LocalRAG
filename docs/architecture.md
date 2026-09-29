@@ -1,170 +1,159 @@
-# LocalRAG Architecture
+# LocalRAG 시스템 구조
 
-## System boundary
+문서 기준: 2026-09-28, 기능 코드 `f607670`. 현재 설정·동작을 설명하는 문서다.
+과거의 구현·평가 조건은 [설계 결정 기록](decisions/)에 별도로 보존한다.
 
-LocalRAG is a local-first developer knowledge and workflow assistant. A configured Workspace
-is the trust boundary. External callers select a Project with a Workspace-relative `projectId`;
-canonical path checks, scan policy, sensitive-name filtering, file-size limits, and strict UTF-8
-decoding protect every downstream read.
+## 시스템 경계
 
-```text
-Tauri Desktop Window
-  -> React/Vite UI
-     -> fixed loopback API bridge
-        -> Spring Boot REST API (bundled executable JAR or identified existing process)
-     -> Workspace discovery and safe file scan
-     -> Document read -> Chunk -> Ollama embedding -> pgvector
-     -> Vector retrieval -> bounded context -> Ollama chat
-     -> Read-only Git/Docker/DB/Ollama/Log tools -> Agent
-     -> Error History / Progress / Activity / Automation
-  -> PostgreSQL + pgvector
-  -> local Ollama models
-```
-
-## Frontend
-
-The React application is a thin Project-scoped client. `App.tsx` owns navigation, Project
-selection, discovery, and overview loading. Page components own feature inputs and result
-presentation; API modules own HTTP contracts and normalize server errors. Although legacy
-discovery responses contain root metadata, only the read-only Project detail displays the root.
-The UI never accepts an absolute-path input. No client state library was added.
-
-The ten screens are Dashboard, Unified Chat, legacy RAG, legacy Agent, Errors, Progress,
-Activity, Automation, Notifications, and Settings. Unified Chat is the primary entry; legacy
-RAG and Agent are advanced views. The Settings screen exposes availability only, never credentials
-or arbitrary filesystem controls. Vite proxies `/api` to port 18080 in browser development.
-In production Tauri, the client invokes one Rust command that accepts only `/api/**`, only
-GET/POST/PUT/PATCH, and always targets `127.0.0.1:18080`. External URLs, traversal, backslashes,
-DELETE and responses above 10 MB are rejected.
-
-## Desktop process boundary
-
-The Window opens first. A native worker sequentially prepares Docker (180 s), PostgreSQL (90 s),
-Ollama (60 s), required models (5 s), and Backend (90 s). Each probe/command has its own timeout;
-a stage deadline can exceed its budget by at most the in-flight bounded command. The frontend
-polls for at most 510 attempts and displays every stage, failure reason, and Retry Startup.
-Retries are serialized; already-running services are reused.
-
-Docker uses the installed fixed CLI and the local desktop Linux named pipe. Only the
-`local-ai-postgres` container with Compose labels `local_ai_work/postgres` may be started.
-When missing, the bundled repository compose file starts only `postgres` with no dependencies
-or image pull. The existing Compose project/volume name is preserved. Unhealthy or foreign
-containers fail explicitly. Ollama uses its known installation path and `serve`; model tags are
-checked exactly, never downloaded.
-
-The Backend health includes `application=localrag`; compatibility with older LocalRAG instances
-also checks Workspace discovery. A free 18080 port starts only the bundled JAR with Java 17.
-Tauri verbatim Windows resource paths are normalized for Java's JAR launcher. All child consoles
-are hidden and output goes to the app log directory. Existing listeners/processes are never killed.
-Timeout cleanup terminates only the orchestrator's own short-lived CLI probe, not a service.
-Closing the app leaves shared runtimes available for reuse.
-
-The API bridge runs blocking I/O off the UI thread, disables redirects/proxies, and only targets
-the fixed loopback Backend. Startup has no arbitrary command/path input and is not exposed as
-an Agent tool. Docker OS/socket recovery is an external maintenance action, never automatic.
-
-## Backend overview boundary
-
-`GET /api/workspaces/projects/overview?projectId=...` composes bounded summary data already
-owned by existing services: Project metadata, Git status, vector index statistics, Error
-History count, notification count, and Docker/Ollama/database availability. Individual
-component failures are represented as status data so one unavailable integration does not
-prevent the dashboard from rendering.
-
-The overview endpoint does not execute mutation tools, index Projects, start services, or
-invoke an LLM. Feature pages continue to call their existing Project-scoped APIs directly.
-
-`GET /api/workspaces/overview` discovers Projects once, uses four bulk metadata queries
-(index counts, error counts, notification counts, automation config), and reads bounded Git
-metadata per repository. It does not return document contents or embeddings. The frontend
-uses one request for the entire scrollable list; opening detail requires no further request.
-Failures are represented by unknown values/warnings rather than fabricated zero counts.
-
-Git push badges use ancestry against the configured upstream SHA; divergence uses that same
-locally cached ref. No upstream, missing ref and command failures remain distinct from pushed
-or unpushed. No network fetch occurs, so this is not a live remote-server assertion.
-
-## Data and AI paths
+LocalRAG는 지정한 작업공간의 프로젝트 자료와 로컬 개발 환경을 연결한다.
+`WorkspaceProperties`는 기본 경로를 공급하고, 탐색·읽기 서비스는 명시적인 `Path`도 받는다.
+외부 프로젝트 식별자 `projectId`는 작업공간 기준 상대 경로다. 탐지 응답 등 일부 메타데이터에는
+절대 경로가 포함되므로 모든 API가 절대 경로를 숨기는 구조는 아니다.
 
 ```text
-Knowledge path:
-Project -> policy-filtered Document -> structural Chunk -> 1024-d embedding
-        -> pgvector cosine search -> 8,000-character Context -> cited answer
-
-Workflow path:
-Git / Docker / Database / Ollama / Log evidence -> read-only Agent
-Error -> analysis -> history -> audit -> similar-error retrieval
-Project evidence -> progress/activity -> automation run -> notification candidate
+Tauri 창 → React/Vite 화면
+  → 고정된 로컬 API 연결 → Spring Boot
+     ├─ 프로젝트 탐지 → 메타데이터 탐색 → 정책 검사 → 문서 읽기
+     ├─ 청크 분할 → Ollama 임베딩 → PostgreSQL/pgvector
+     ├─ 벡터 검색 → 제한된 근거 문맥 → Ollama 답변
+     ├─ Git/Docker/DB/Ollama/로그 조회 → 읽기 전용 Agent
+     └─ 오류 이력 / 진행 상태 / 최근 작업 / 자동화
 ```
 
-Retrieval remains Top-K 5, threshold 0.45, Query Instruction enabled, vector-only sequential
-search. Unified Chat adds its own orchestration policy and bounded live evidence; legacy RAG
-prompt, chunking, ranking and models remain unchanged.
+경로 정규화·실제 경로 검사, 민감 파일명·제외 경로·크기 정책, 엄격한 UTF-8 읽기를 적용한다.
+이것은 범위가 있는 방어다. 내부 심볼릭 링크 대상의 제외 정책 재검사, 검사와 읽기 사이의
+경쟁 조건, 일반 파일 본문 안의 모든 비밀값까지 완전히 해결한 것은 아니다.
 
-## Unified conversation and onboarding
+## 프런트엔드
+
+`App.tsx`는 화면 전환, 프로젝트 선택, 탐지·개요 조회를 관리한다. 각 페이지는 입력과 결과 표시,
+API 모듈은 요청 계약과 오류 정규화를 담당한다. 별도의 클라이언트 상태 관리 라이브러리는 없다.
+작업공간 경로를 입력·등록하는 UI는 없으며 읽기 전용 프로젝트 상세에서 경로를 확인한다.
+
+화면은 대시보드, 채팅, 지식 검색 상세, 에이전트 상세, 오류 관리, 진행 상태, 최근 작업,
+자동화, 알림, 설정의 10개다. 채팅이 기본 진입점이며 기존 RAG/Agent 화면은 상세 기능으로 남아 있다.
+설정 화면은 가용성과 모델 기준값을 표시하지만 자격 증명·임의 경로·모델 선택 기능은 제공하지 않는다.
+Enter 전송, Shift+Enter 줄바꿈, 한글 조합 중 전송 방지와 입력 복원 처리가 있다. 대화 기억은 없다.
+
+웹 개발에서는 Vite가 `/api`를 18080 포트로 전달한다. 배포 앱에서는 Rust 명령으로 연결하며
+`127.0.0.1:18080`, `/api/**`, GET/POST/PUT/PATCH만 허용한다. 외부 URL, 경로 우회,
+역슬래시, DELETE를 거부한다. 응답은 읽은 뒤 10 MB 한도를 검사하므로 수신 메모리까지
+스트림 단위로 제한하는 구현으로 설명하면 안 된다.
+
+## 데스크톱 시작 제어
+
+창을 먼저 연 뒤 작업 스레드에서 다음 단계를 순차 실행한다.
+
+| 단계 | 준비 시간 예산 | 처리 |
+|---|---:|---|
+| Docker | 180초 | 고정 CLI와 로컬 Linux Engine 파이프 확인, 필요 시 Desktop 시작 |
+| PostgreSQL | 90초 | 소유권을 확인한 컨테이너 재사용/시작 후 healthy 확인 |
+| Ollama | 60초 | 기존 서버 재사용 또는 알려진 실행 파일로 `serve` 시작 |
+| 모델 | 5초 | 필수 모델 태그 확인, 자동 다운로드하지 않음 |
+| Backend | 90초 | 기존 LocalRAG 확인 또는 Java 17로 번들 JAR 시작 |
+
+각 명령/탐색에도 별도 시간 제한이 있다. 단계 종료가 진행 중인 명령의 제한만큼 늦어질 수 있다.
+프런트엔드는 최대 510회 상태를 조회하고 단계·실패 이유·재시도 버튼을 표시한다.
+재시도는 중복 실행되지 않으며 준비된 서비스를 재사용한다.
+
+Docker에서는 Compose label이 `local_ai_work/postgres`인 `local-ai-postgres`만 시작한다.
+컨테이너가 없으면 번들 compose의 `postgres`만 의존 서비스 실행·이미지 pull 없이 준비한다.
+기존 프로젝트/볼륨 이름을 유지하고, 다른 소유자나 비정상 상태의 컨테이너는 오류로 보고한다.
+Ollama의 필수 태그는 `qwen3:8b`, `qwen3-embedding:0.6b`다.
+
+백엔드는 health의 `application=localrag`를 확인하고 구버전 호환 확인에는 작업공간 탐지도 사용한다.
+18080 포트가 비어 있을 때만 번들 JAR를 `127.0.0.1`에 시작한다. Windows 리소스 경로는 Java가
+읽을 수 있게 정규화한다. 콘솔은 숨기고 출력은 앱 로그에 기록한다. 기존 프로세스를 강제 종료하지
+않으며 시간 초과 정리는 시작 제어기가 만든 짧은 CLI 탐색 프로세스만 대상으로 한다.
+앱을 닫아도 공용 서비스를 유지해 다음 실행에서 재사용한다.
+
+로컬 API 연결은 UI 스레드 밖에서 수행하며 프록시·리다이렉트를 사용하지 않는다.
+연결 제한은 3초, 요청 전체 제한은 120초다. 시작 제어는 Agent 도구가 아니며 임의 명령/경로를
+입력받지 않는다. Docker의 OS/소켓 복구·초기화는 자동 실행하지 않는다.
+
+## 프로젝트 개요 API
+
+`GET /api/workspaces/projects/overview?projectId=...`는 메타데이터, Git, 인덱스 통계,
+오류·알림 수, Docker/Ollama/DB 가용성을 모은다. 일부 연동이 실패해도 상태와 경고를 반환한다.
+인덱싱·서비스 시작·LLM 호출은 하지 않는다.
+
+`GET /api/workspaces/overview`는 한 번 프로젝트를 탐지하고 인덱스/오류/알림/자동화의
+4개 일괄 DB 조회와 제한된 Git 조회로 전체 목록을 만든다. 본문이나 벡터를 반환하지 않는다.
+화면에서 목록의 상세를 펼칠 때 추가 API 요청이 없고 실패한 수치는 0 대신 미확인으로 남긴다.
+
+언어 비율은 소스 파일 수 기준이지 코드 줄 수가 아니다. 메타데이터 캐시는 최대 64개, 기본 5분이다.
+캐시가 있어도 Git/DB 조회 비용은 남는다. Git 원격 상태는 설정된 upstream의 로컬 참조 기준이며
+자동 fetch를 하지 않으므로 원격 서버의 현재 상태를 보장하지 않는다.
+
+## 인덱싱과 RAG
 
 ```text
-POST /api/workspaces/projects/chat/unified (Project-relative ID)
-  -> existing qwen3 Tool Calling, no separate router call
-     -> existing Knowledge / Git / environment / workflow callbacks
-        -> Knowledge: existing RAG + safe ProjectBrief samples + overview facts
-        -> Progress / Activity: existing collectors, without nested summary LLM
-        -> Diagnosis: reuse ErrorAnalysis validation on collected evidence
-  -> bounded sanitized evidence / Tool trace / citations
-  -> answer + warnings (or explicit insufficient evidence)
+프로젝트 → 정책을 통과한 UTF-8 문서 → 문자/구조 경계 청크
+ → 1024차원 임베딩 → pgvector 저장
+질문 → 검색 지침 → 질문 임베딩 → 프로젝트 범위 코사인 검색
+ → 출처 필터·중복 제거·8,000자 문맥 → 답변과 인용
 ```
 
-No exact-query intent rules or new Tool names are added. The source-file selector may match
-an explicitly named identifier to an existing file, but it does not choose the conversational
-route. Generic questions use the model's GENERAL contract without Tools. Unverified Project
-drafts with no Tool are discarded and retried once; a second invalid draft is withheld.
-No-tool failures are labeled UNRESOLVED, not GENERAL. This is a bounded safeguard, not
-independent semantic hallucination verification.
+청크는 일반 텍스트 2,000자, 소스 2,400자, 중첩 200자다. Java 문자열 길이 기준이며 AST/토큰
+단위 분할은 아니다. 재인덱싱은 전체 재읽기·재임베딩 후 안정적 ID로 upsert하고 오래된 청크를
+트랜잭션 안에서 삭제한다. DB 중복 방지와 변경 파일만 임베딩하는 증분 처리는 다르다.
+읽기/청크 일부 실패가 저장 단계의 중단 조건에 포함되지 않는 한계는
+[사실·근거 조사](portfolio-facts-audit.md)의 3절에 기록했다.
 
-Unified invocation uses thinking OFF, maximum 1,200 output tokens, at most 6 callback attempts
-and 2 Knowledge calls. Duplicate arguments reuse results. The legacy Agent generation path
-is retained. Progress/Activity avoid intermediate summary generations in the Unified path.
+검색은 기본 Top-K 5, 임계값 0.45, Query Instruction ON이다. Raw Query 전환이 가능하다.
+SQL에서 프로젝트를 제한하고 `<=>` 거리순으로 정렬한다. HNSW/IVFFlat, BM25, reranker는 없다.
+문맥 예산은 헤더·경로·줄·내용을 포함한 8,000자다. 넘치는 청크는 통째로 제외한다.
+후처리로 빠진 결과를 추가 검색해 채우지는 않는다. 근거가 없으면 RAG 전용 경로는 모델을 호출하지 않는다.
 
-ProjectBrief reads at most 8 policy-approved files, 1,400 characters per excerpt and 6,000
-characters overall; paths and line references are retained. The reader rechecks all access
-policies even for cached candidates. No automatic indexing or mutation occurs.
+## 통합 채팅
 
-Project language ratios reuse metadata scanning, exclude generated/sensitive/oversized files,
-and count known source extensions rather than lines. A bounded 64-entry, 5-minute cache
-avoids scanning on every Dashboard load. A single Workspace overview includes all Project
-rows and details; expanding a row performs no further API call. Git and DB collection still
-cost time on cache hits.
+```text
+POST /api/workspaces/projects/chat/unified
+ → 기존 모델로 도구 계획 1회 생성
+ → 등록된 읽기 전용 도구 최대 6개, 같은 도구 중복 제거
+    ├─ 지식: 기존 RAG + 안전한 현재 파일 발췌 + 개요
+    ├─ 진행 상태/최근 작업: 중간 요약 LLM 없이 근거만 수집
+    └─ 진단: 수집된 근거에 기존 오류 분석 검증 적용
+ → 도구 스키마 없는 새 요청으로 최종 답변
+ → 정상 종료·지원되는 식별자·인용 검사 → 결과 또는 명시적 실패
+```
 
-The UI distinguishes file/Project evidence, runtime observations and workflow history.
-Citation validation checks IDs, not claim-level semantics. The real evaluation found omitted
-citations and unsupported completion claims; see [evaluation](unified-chat-evaluation.md)
-and [decision](decisions/0034-unified-chat-onboarding-korean-ux.md).
+별도 모델 라우터나 질문 문자열별 고정 라우팅 표는 없다. 파일 선택기는 명시한 심볼과 파일명을
+대조할 수 있으나 대화의 경로를 결정하는 규칙과는 다르다. 일반 지식은 도구 없이 답할 수 있다.
+현재는 도구 없는 미검증 프로젝트 초안을 보류하며, 과거 기록의 자동 재선택 방식과 구분한다.
 
-## Failure isolation and security
+통합 호출은 thinking OFF, 최대 출력 650토큰, context window 8192, temperature 0이다.
+최종 호출에는 도구 스키마와 폐기한 초안/이전 대화를 다시 넣지 않는다. 일반 질문은 보통 1회,
+도구 질문은 보통 2회 모델 호출 구조다. 기존 에이전트 상세는 별도 경로와 16384 문맥 설정을 유지한다.
 
-- A file read failure does not abort its Project; a Project scan failure does not abort its Workspace.
-- Sensitive names, excluded directories, files over 5 MB, invalid UTF-8, path traversal, and link escape are rejected.
-- Agent tools are read-only and their evidence is bounded and redacted.
-- RAG content is untrusted evidence; citations and no-evidence behavior remain explicit.
-- Automation persists bounded summaries and candidates but does not change source, Git, or service state.
+`ProjectBriefService`는 허용된 후보 최대 8개를 읽어 최대 6개 발췌를 만든다.
+발췌당 1,100자, 합계 4,800자이며 경로·줄을 유지한다. 캐시된 후보도 Reader 정책을 재검사한다.
+지식 도구는 상위 인덱스 결과 2개를 우선 확보한 뒤 실제 파일 발췌와 나머지 검색 결과를 합친다.
+최대 6개 출처, 파일당 2개, 경로 등을 포함해 약 6,500자 예산이다. 이는 전체 Prompt의 한도가 아니다.
+자동 인덱싱이나 소스 변경은 하지 않는다.
 
-## Development startup boundary
+## 실패·근거·보안 한계
 
-`dev-start.ps1` remains a developer-only startup boundary. It checks Docker readiness, starts only
-the fixed `postgres` Compose service when needed, checks or starts the fixed Ollama executable,
-and then starts Spring Boot on port 18080 and Vite on port 5173. It reuses identified LocalRAG
-listeners and reports an occupied port without terminating its owner. Runtime logs and listener
-PIDs live under the ignored `.localrag/` directory.
+- 파일 읽기 실패와 프로젝트 메타데이터 탐색 실패를 각각 격리한다. 작업공간 전체 접근 실패는 별개다.
+- 외부 경로 우회, 민감 이름, 제외 경로, 5 MB 초과, 잘못된 UTF-8을 정책으로 처리한다.
+- Agent 도구는 읽기 전용이고 출력 크기·시간·민감 정보 마스킹을 적용한다.
+- 문서·로그·Git 메시지는 명령이 아니라 신뢰하지 않는 근거 자료다.
+- 통합 채팅은 finish reason/done을 확인하며 미완료 결과를 `LLM_FAILED`로 처리한다.
+- 근거 밖 복합 식별자/지원 파일명은 `INSUFFICIENT_EVIDENCE`로 보류한다. 의미 검증기는 아니다.
+- 인용 ID 검증과 주장 정확성은 다르다. 정상 종료/유효한 인용이어도 의미 오류가 남을 수 있다.
+- 최근 통합 채팅 방어가 기존 RAG/일반 Chat/Agent 모든 API에 동일하게 적용된 것은 아니다.
+- 자동화는 이력·알림 후보를 저장하지만 소스·Git·관찰 대상 서비스 상태는 변경하지 않는다.
+- 로컬 사용 전제이며 인증·다중 사용자 권한 모델은 없다. standalone Backend bind와 DB 포트 노출은 별도 주의가 필요하다.
 
-The Launcher never removes a container or volume, pulls a model, stops a process, or exposes
-these operations through Agent Tools. The Tauri wrapper also has no shell or filesystem
-permission. Its native boundaries are fixed startup orchestration/status/retry and the validated
-loopback API bridge.
+## 개발 실행과 배포
 
-## Desktop release deployment
+`dev-start.ps1`은 개발용이다. Docker → 고정 `postgres` 서비스 → Ollama → Backend 18080 → Vite
+5173 순서로 준비하며 확인된 기존 서비스를 재사용한다. 점유된 포트의 프로세스를 죽이지 않는다.
+개발 로그/PID는 Git에서 제외한 `.localrag/`에 둔다.
 
-`npm run desktop:build` first creates the fixed Spring Boot executable JAR and Vite production
-assets, then builds a Windows x64 executable and unsigned NSIS installer. The JAR is a read-only
-bundle resource. The release depends on an external Java 17 installation; a custom jlink runtime,
-code signing and auto-update remain deferred. Fixed Docker/Ollama startup is now handled by
-the Desktop orchestrator; installation and general service management remain outside its scope.
+`npm run desktop:build`는 Backend JAR와 Vite 자산을 만든 뒤 Windows x64 exe와 서명되지 않은
+NSIS 설치 파일을 만든다. 번들 JAR는 읽기 전용 리소스다. 외부 Java 17, Docker, Ollama와 모델이
+필요하다. jlink 런타임 동봉, 코드 서명, 자동 업데이트는 현재 제공하지 않는다.
+
+최종 검증 기록과 남은 출력 품질 문제는 [배포 점검표](release-checklist.md)와
+[설계 결정 기록 0036](decisions/0036-final-quality-guards-and-release.md)을 참고한다.

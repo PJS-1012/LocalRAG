@@ -1,137 +1,79 @@
-# Decision 0025: Evidence-bound Agent answer hardening
+# 0025. 근거 범위에 맞춘 Agent 답변 보강
 
-## Status and scope
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Phase 7 Step 4.1 is complete as a bounded hardening step. The functional evidence and
-Citation contracts are accepted. qwen3:8b prose remains probabilistic and did not pass every
-grounded-answer example; those remaining output-quality issues are backlog rather than a reason
-to repeat the same live evaluation.
+## 당시 상태와 범위
 
-No new Tool, retrieval method, write capability, scheduler, notification, Multi-Agent flow,
-UI, or performance optimization was added. The Agent context window remains 16,384.
+Phase 7 Step 4.1을 제한된 보강 단계로 종료했다. 기능적 근거/인용 계약은 승인하되
+qwen3:8b의 남은 문장 품질 문제 때문에 같은 실제 평가를 반복하지 않기로 했다.
+새 도구·검색·쓰기·자동화·Multi-Agent·UI·성능 최적화는 추가하지 않았다. Agent 문맥은 16,384다.
 
-## Fact, inference, and unknown policy
+## 사실·추론·미확인 정책
 
-The system policy continues to require three sections: confirmed facts, inference, and
-inspection limits. It now explicitly limits certainty to confirmed, likely based on current
-evidence, possible, or cannot determine from current evidence.
+확인 사실/추론/확인 한계를 나누고 확신은 확인됨, 현재 근거상 가능성 높음, 가능성 있음,
+현재 근거로 판단 불가로 제한한다.
 
-- A component-level check must not become a whole-system conclusion.
-- A successful JDBC connection and pgvector check do not prove that the entire database is healthy.
-- A container state or exit code does not establish a root cause.
-- NO_LOG_FILES means no permitted log file was found in the bounded configured scope. It is not
-  a Tool failure and does not prove that no error exists.
-- Git chronology and an error observed in the same inspection do not establish causation.
-- A failed routed Tool is not permission to query unrelated subsystems.
-- A generic Tool failure permits no invented network, permission, path, socket, or configuration cause.
-- Answers must not add commands, recommendations, next steps, or lists of possible causes.
+- 일부 점검을 전체 시스템 건강으로 확대하지 않는다. JDBC/pgvector 연결은 DB 전체 정상의 증거가 아니다.
+- 컨테이너 상태/종료 코드만으로 원인을 확정하지 않는다.
+- `NO_LOG_FILES`는 허용 범위에서 로그를 못 찾았다는 뜻이며 도구 실패/오류 부재가 아니다.
+- Git 시간 순서와 동시 관찰 오류만으로 인과를 단정하지 않는다.
+- 실패 도구를 이유로 무관한 하위 시스템까지 조회하거나 네트워크·권한·경로·소켓·설정을 원인으로 만들지 않는다.
+- 명령·권고·다음 단계·가능한 원인 목록을 덧붙이지 않는다.
 
-The callback boundary annotates successful Tool JSON with an evidenceAvailable flag and a
-Tool-family-specific answerBoundary. Failed DTO values are still removed, and failed output now
-states that the cause is unknown and omitted values must not be interpreted.
+성공 JSON에 `evidenceAvailable`과 도구별 `answerBoundary`를 추가한다.
+실패 기본값은 계속 제거하고 이유 미확인/생략값 해석 금지를 명시한다.
 
-## Citation contract
+## 인용 계약
 
-The existing RagCitationValidator is reused. It now recognizes both the RAG form S1 and the
-request-scoped Agent form K1-S1.
+기존 `RagCitationValidator`가 S1과 K1-S1을 모두 인식한다.
+`AgentToolExecution`은 성공한 `searchProjectKnowledge`의 ID·마스킹 경로·줄만 수집한다.
+본문은 제한된 도구 결과 내부에 두고 API Citation 메타데이터에 복제하지 않는다.
+`AgentChatResponse`에 `knowledgeSourceCount`, `knowledgeSources`, `usedSourceIds`, `invalidSourceIds`를 추가한다.
+없는 ID/근거가 있는데 인용 없음은 경고다. 실패/빈 검색은 유효 ID를 제공하지 않는다.
+실행 상태 사실은 `toolsUsed`/`toolCalls`로 추적한다.
 
-AgentToolExecution captures only citation metadata from successful searchProjectKnowledge results:
-ID, redacted path, start line, and end line. Source content stays inside the bounded Tool result.
-AgentChatResponse additively exposes:
+## 합성 회귀
 
-- knowledgeSourceCount
-- knowledgeSources
-- usedSourceIds
-- invalidSourceIds
+DB 범위 제한, 실패 DTO 기본값 제거, 로그 부재 의미, Git 비인과성,
+K1-S1 성공 매핑, 누락/가짜 인용 경고, 본문 비복제, 도구 실패 격리/성공 기록 보존을 검증했다.
 
-An unavailable citation produces a warning. Available knowledge evidence with no citation also
-produces a warning. A failed or empty Knowledge search supplies no valid citation. Runtime
-Git/Docker/DB/Log facts continue to use toolsUsed and toolCalls metadata rather than Source IDs.
+## 첫 실제 평가
 
-## Synthetic regression coverage
+6개 시나리오가 4분 48초에 완료됐다. 평균 도구 2,239.7/LLM 43,045.3/전체 45,328.3 ms였다.
 
-Automated tests cover the requested cases:
-
-1. DB reachable=true is paired with a scope boundary that forbids an entire-DB health claim.
-2. Failed Docker/DB DTO default false, zero, and empty values are removed before model use.
-3. NO_LOG_FILES is explicitly a bounded observation rather than proof that errors are absent.
-4. Git chronology is explicitly non-causal.
-5. Successful Knowledge evidence is mapped to K1-S1 and validated.
-6. Missing and invented Knowledge citations raise response warnings.
-7. Knowledge source content is not copied into API citation metadata.
-8. A failed Tool remains isolated while successful Tool metadata is retained.
-
-## First live evaluation
-
-The first Step 4.1 run completed all six selected scenarios in 4 minutes 48 seconds. Average Tool
-time was 2,239.7 ms, average LLM time 43,045.3 ms, and average total time 45,328.3 ms.
-
-| Case | Result |
+| 사례 | 판단 |
 |---|---|
-| Overall environment | Correct observations, but inferred generic causes from an exited container: PARTIAL |
-| DB cause | Kept failed DB as unknown, but invented container/configuration possibilities and advice: PARTIAL |
-| Docker cause | Correct state, but invented network/internal-error explanations and a command: FAIL |
-| Log plus Git | Did not assert commit causation, but called NO_LOG_FILES a failure and suggested extra checks: PARTIAL |
-| Knowledge structure | Search failed because PostgreSQL was down; invented K1-S1 was detected as invalid: validator PASS, answer FAIL |
-| DB success plus Log failure | Preserved DB evidence, but invented failure causes and emitted mixed Han text: PARTIAL |
+| 전체 환경 | 관찰은 맞으나 종료 컨테이너의 일반 원인 추정, PARTIAL |
+| DB 원인 | DB 실패는 미확인 유지, 컨테이너/설정 추측·조언, PARTIAL |
+| Docker 원인 | 상태는 맞으나 네트워크/내부 오류·명령 생성, FAIL |
+| 로그+Git | 커밋 인과 단정 없음, NO_LOG_FILES를 실패로 오해/추가 확인 조언, PARTIAL |
+| 지식 구조 | PostgreSQL 중단으로 검색 실패, 가짜 K1-S1 탐지: validator PASS/답변 FAIL |
+| DB 성공+로그 실패 | DB 유지, 실패 원인 생성/언어 혼합, PARTIAL |
 
-This run proves that Prompt-only restraint does not guarantee grounded prose. It also proves that
-invalid Knowledge citations are detected after model completion.
+Prompt만으로 근거 충실도를 보장하지 못하며, 생성 후 잘못된 ID를 탐지할 수 있음을 확인했다.
 
-## Final bounded rerun and interruption
+## 마지막 제한 재평가와 중단
 
-The existing local-ai-postgres container was started without recreation or volume changes and
-reported healthy. A final run was started with the same six selected cases after adding structured
-answerBoundary fields.
+기존 `local-ai-postgres`를 재생성/볼륨 변경 없이 시작해 healthy를 확인한 뒤 같은 6개를 재평가했다.
+구조화한 `answerBoundary` 이후 Q1/Q10/Q11이 `build/reports/agent-step4-1/evaluation-selected.json`에 기록됐다.
+평균 도구 475/LLM 42,739/전체 43,287.7 ms였다.
 
-Q1, Q10, and Q11 were written to
-build/reports/agent-step4-1/evaluation-selected.json. Their average Tool time was 475 ms, average
-LLM time 42,739 ms, and average total time 43,287.7 ms.
+- Q1: 4개 환경 결과의 범위를 유지하고 연결≠전체 정상 표시, PASS.
+- Q10: getDatabaseStatus만 호출, 전체 정상 단정은 없지만 무관한 원인/도구 권고, PARTIAL.
+- Q11: 상태는 맞으나 getRecentErrors 추가와 근거 없는 원인 목록, PARTIAL.
 
-- Q1: all four environment checks were correctly scoped and the answer explicitly said that
-  connectivity does not guarantee whole-system health: PASS.
-- Q10: only getDatabaseStatus was called and whole-DB health was not claimed, but the answer still
-  suggested unrelated possible factors and more Tools: PARTIAL.
-- Q11: runtime state was correct, but getRecentErrors was unnecessarily added and the answer still
-  listed unsupported possible causes: PARTIAL.
+Q12 로그+Git 인과 사례가 qwen 응답을 비정상적으로 오래 기다렸다.
+확인 시 JSON은 앞 3개뿐이었고 Gradle wrapper/daemon/Test worker는 살아 있었지만 Git/Docker 자식 대기는 없었다.
+실행을 중단해 exit code 1을 확인하고 Gradle/Test worker 트리가 종료됐음을 확인했다. 추가 실평가는 하지 않았다.
+성공 Knowledge 사례까지 도달하지 못했으므로 그 성공/잘못된 인용 경로는 단위 테스트 근거로 구분한다.
 
-Q12, the Log plus Git causality case, then waited abnormally for a qwen response. At inspection
-time only Q1/Q10/Q11 existed in the JSON. The Gradle wrapper, daemon, and Test worker were alive;
-no Git/Docker child Tool process was waiting. The run was interrupted, exit code 1 was expected,
-and the Gradle/Test worker process tree was confirmed gone. No additional live rerun is authorized
-or needed for this Step.
+## 자동 테스트와 종료
 
-The final rerun did not reach the successful Knowledge case. Successful and invalid Agent Citation
-paths are covered deterministically by unit tests; the earlier failed-search live case covered
-post-generation invalid-ID detection.
+최종 전체 Gradle은 33초, 135사례 중 134 통과/실모델 1 제외/실패·오류 0이었다.
+이전 Docker 실패의 Application/IndexRepository/SearchRepository 통합 테스트도 복구된 Engine에서 별도 통과했다.
+테스트를 삭제·약화·추가 제외한 것이 아니라 환경을 복구한 결과다.
 
-## Automated test result
-
-The final full Gradle run completed in 33 seconds: 135 discovered tests, 134 executed and passed,
-zero failures/errors, and one opt-in live evaluation skipped by default.
-
-The three tests that previously failed during Docker discovery were also run explicitly with the
-recovered Engine and all passed:
-
-- LocalAiWorkspaceApplicationTests
-- ProjectIndexRepositoryIntegrationTest
-- ProjectSemanticSearchRepositoryIntegrationTest
-
-Their earlier failure was an unavailable Testcontainers environment, not an assertion or product
-code failure. No test was deleted, skipped, or weakened.
-
-## Decision and backlog
-
-Recommend closing Phase 7 Step 4. The structural Tool selection, partial-failure preservation,
-default-value isolation, Citation validation, and API traceability are ready.
-
-Backlog:
-
-1. qwen3:8b can still ignore explicit answer boundaries and emit unsupported possible causes or
-   unsolicited next steps. Do not treat Agent prose as a confirmed root cause.
-2. Evaluate structured answer generation, a deterministic claim policy, or a stronger model in a
-   separate quality step. Do not keep tuning the same Prompt in this Step.
-3. Add a bounded per-case timeout to the opt-in live evaluation harness before broad model suites.
-4. Tool-result compression, fewer Tool rounds, model comparison, and context reduction remain
-   performance experiments. Current accuracy-first latency is about 43 seconds average LLM time.
-5. Knowledge retrieval still inherits the existing corpus ranking backlog.
+도구 선택·부분 실패 보존·기본값 격리·인용 검증·API 추적성을 근거로 Step 4/Phase 7 종료를 권고했다.
+남은 기록: 근거 없는 가능 원인/조언, 모델 언어 품질, 당시 평균 LLM 약 43초,
+지식 검색 순위. 구조화 응답·결정적 주장 정책·모델 비교·평가별 timeout·결과 압축 등의 후보는
+당시 후속 검토 항목이며 구현 완료 목록이 아니다.

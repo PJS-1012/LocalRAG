@@ -1,19 +1,21 @@
-# 0035 — Unified Chat 근거 선택·응답 품질·호출 비용 개선
+# 결정 0035: 통합 채팅 근거 선택·응답 품질·호출 비용 개선
+
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
 - 시작: 2026-09-22
-- 상태: 진행 중. 최종 성공 기준 검증 전이며 완료 선언 아님.
+- 최종 상태: 2026-09-27 사용자 요청으로 작업 종료. 품질 목표 전체 달성은 아님. 아래 준비 표는 착수 당시 상태이며 후속 방어·전체 테스트·재패키징 결과는 [결정 0036](0036-final-quality-guards-and-release.md)에 있다.
 - 사용자 지시: 6b2d854e-8761-4655-84e9-e1eaf7839ebb/pasted-text-1.txt
-- 이전 미커밋 README 한글화/입력 초기화 변경은 보존한다. Push 금지.
+- 당시 조건: 이전 미커밋 README 한글화/입력 초기화 변경 보존, push 금지. 이후 사용자 승인에 따른 커밋·push 이력과는 구분한다.
 
-## 원래 목표와 검증 계획
+## 착수 당시 목표와 검증 계획
 
 기능 추가가 아니라 처음 보는 개발자가 프로젝트를 이해할 수 있는 답변을,
 프로젝트 핵심 근거·출처와 함께 현재보다 빠르게 제공한다.
 Java/Spring과 Unity/C# 양쪽 실제 프로젝트에서 검증한다.
 
-| 요구 | 완료 증거 | 현재 |
+| 요구 | 완료 증거 | 착수 당시 상태 |
 |---|---|---|
-| A: 모델 HTTP 요청별 횟수/목적/모델/입출력 크기/시간/성공, 단계별 시간 | unit test + 실제 응답 diagnostics | 계측 구현 중 |
+| A: 모델 HTTP 요청별 횟수/목적/모델/입출력 크기/시간/성공, 단계별 시간 | 단위 테스트 + 실제 응답 진단값 | 당시 계측 구현 중 |
 | B: 중복 모델·구조화된 Workflow 재요약 제거 | 실제 before/after 호출 수, 회귀 테스트 | 조사 중 |
 | C/D: 프로젝트 코드 우선·외부/생성/라이선스 억제·명시적 dependency 질문 허용 | 경로 정책 테스트 + 실제 Unity source 목록 | 미완료 |
 | E/F: broad 최소 근거 조합·필요할 때만 bounded decomposition·중복 제거 | routing/context 테스트 + broad 실제 질문 | 미완료 |
@@ -21,7 +23,7 @@ Java/Spring과 Unity/C# 양쪽 실제 프로젝트에서 검증한다.
 | I/J: context/중복/출력 길이 감소 | 실제 입력·출력 크기 및 시간 비교 | 미완료 |
 | K/L/M/N: Java/Unity 실제 질문 16종 및 변형 평가 | per-query JSON/평가표, origin/citation/call/time 수치 | 미완료 |
 | O: 같은 PC/model의 의미 있는 지연 감소, 좁은 질문 회귀 없음 | before/after matched set | 미완료 |
-| P: 기본 UI는 간결, 처리 경로·근거·시간 상세 | Frontend test + 화면 확인 | 미완료 |
+| P: 기본 UI는 간결, 처리 경로·근거·시간 상세 | 프런트엔드 테스트 + 화면 확인 | 미완료 |
 | R: Backend/Frontend/Rust/Tauri, 새 6종 회귀 검증 | 최신 실행 결과 | 미완료 |
 | S/T: 원인/측정/한계 문서 및 논리적 커밋, push 없음 | 최종 diff/로그/Git 상태 | 미완료 |
 
@@ -54,7 +56,7 @@ NO_SEPARATE_DECOMPOSITION_CALL을 표시한다. 측정되지 않은 작업을 �
 vector search는 DB 검색, query embedding은 별도 부분합이다. Tool/Progress/evidence 수치는
 중첩된 구간이며 단순 합산하지 않는다.
 
-## Before / After
+## 변경 전후 측정
 
 Before 원본: `build/unified-quality/before/` (2026-09-22, 계측만 적용한 JAR).
 After 원본: `build/unified-quality/after-20260924/` (2026-09-24, 순차 평가).
@@ -117,16 +119,14 @@ Spring 첫 before 호출은 모델 로딩 4,103ms, 마지막 생성 46,808ms였�
 이후 Engine 29.5.3 준비 및 기존 local-ai-postgres healthy를 확인했다.
 컨테이너/volume/데이터 삭제, factory reset, 설정 변경 없음. LocalRAG의 자동 복구 기능으로 추가하지 않았다.
 
-## 남은 한계
-
 ## 작업 종료 기록 (2026-09-27)
 
 사용자 요청에 따라 추가 튜닝과 실제 모델 재평가를 중단한다. 구현과 평가 자료는 보존하되,
 품질 목표를 완전히 달성했다고 판단하지 않는다. 최종 38개 순차 평가 요청은 모두 기록되었으며
 원본은 `build/unified-quality/final-20260927/`에 있다. API SUCCESS는 답변 품질 PASS가 아니다.
 
-- 개선: broad 질문에서 third-party/generated 자료 대신 프로젝트 자체 코드 우선 선택.
-  명시적 TextMesh Pro 질문에서는 third-party 자료 허용을 확인했다.
+- 개선: 프로젝트 전반 질문에서 외부 의존성/생성 자료 대신 프로젝트 자체 코드 우선 선택.
+  명시적 TextMesh Pro 질문에서는 외부 의존성 자료 허용을 확인했다.
 - 이후 보정: 모델이 broad로 오분류해도 원문 질의의 RAG 상위 2개를 먼저 보존하고 live brief를 결합한다.
   회원가입 DTO 검색은 복구됐으나 DTO만으로 실제 저장 동작을 단정하는 답변은 여전히 PARTIAL이다.
 - 시간: 최종 Spring 소개 19.8초, 구조 8.0초, 인수인계 14.2초. 동일 질문 before는

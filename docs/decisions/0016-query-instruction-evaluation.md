@@ -1,54 +1,46 @@
-# Decision 0016: Query instruction evaluation
+# 0016. 질문 임베딩 지침 효과 평가
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Evaluated for Phase 6 Step 4.2. The instruction is recommended for adoption, but this evaluation does not enable it
-in the search service.
+## 상태
 
-## Instruction
+Phase 6 Step 4.2 평가 기록이다. 적용을 추천했지만 서비스 기본 활성화는 다음 0017에서 수행했다.
+
+## 평가한 지침
 
 ```text
 Instruct: Retrieve the most relevant source code or project documentation for the software project query.
 Query: <USER_QUERY>
 ```
 
-The instruction is one English sentence, is applied only to Queries, and leaves stored Document embeddings unchanged.
-This follows Qwen's documented `Instruct: <task>\nQuery:<query>` query-side format and its recommendation to tailor an
-English instruction to the retrieval task.
+질문에만 영어 한 문장을 붙이고 저장된 문서 임베딩은 변경하지 않았다.
+당시 Qwen 문서의 `Instruct: <task>\nQuery:<query>` 형식과 작업별 영어 지침 권고를 참고했다.
+원문: https://huggingface.co/Qwen/Qwen3-Embedding-0.6B
+지침 문자열은 실제 모델 입력이므로 한국어로 번역하지 않는다.
 
-Reference: https://huggingface.co/Qwen/Qwen3-Embedding-0.6B
+## 통제 비교
 
-## Controlled evaluation
+10질문, 208청크, Top-K 5, threshold .45, 분할·정렬을 고정하고 질문 임베딩 입력만 바꿨다.
 
-The same ten Queries, 208-Chunk corpus, Top-K 5, threshold 0.45, chunking, and ranking were retained. Only the text
-sent for Query embedding changed.
-
-| Query | Raw Top-1 | Instruct Top-1 | Raw / Instruct count | Relevant rank change | Judgment |
+| 질문 | Raw Top-1 | 지침 Top-1 | Raw / 지침 결과 수 | 관련 순위 변화 | 판단 |
 |---|---:|---:|---:|---|---|
-| 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 0.635 | 0.657 | 5 / 5 | detector 3 → 2 | Improved |
-| 민감 파일을 어떻게 제외하나? | none | 0.520 | 0 / 5 | scanner absent → 1; policy absent → 4/5 | Strong recovery |
-| 문서를 어떤 기준으로 Chunk로 나누나? | 0.623 | 0.724 | 5 / 5 | `DocumentChunker` 1 → 3 | Ranking regression |
-| 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 0.594 | 0.579 | 5 / 5 | `EmbeddingService` 5 → 4 | Small improvement; migration remains first |
-| 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0.464 | 0.557 | 2 / 4 | relevant decision/test remain 1/2 | Recall improved |
-| Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 0.521 | 0.560 | 5 / 5 | scanner test 5 → 3 | Improved; prior unrelated match removed |
-| Kafka consumer 설정은 어디에 있나? | none | none | 0 / 0 | no relevant result | Precision retained |
-| Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | none | 0.544 | 0 / 5 | security decision/exception absent → 1/2 | Strong recovery |
-| 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 0.635 | 0.590 | 5 / 5 | relevant top ranks retained | Stable despite lower scores |
-| 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 0.541 | 0.617 | 5 / 5 | discovery service 5 → outside Top-5 | Implementation-rank regression |
+| 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 0.635 | 0.657 | 5 / 5 | detector 3→2 | 개선 |
+| 민감 파일을 어떻게 제외하나? | 없음 | 0.520 | 0 / 5 | scanner 없음→1, policy 없음→4/5 | 복구 |
+| 문서를 어떤 기준으로 Chunk로 나누나? | 0.623 | 0.724 | 5 / 5 | DocumentChunker 1→3 | 순위 퇴행 |
+| 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 0.594 | 0.579 | 5 / 5 | EmbeddingService 5→4 | 소폭 개선, Migration 1위 유지 |
+| 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0.464 | 0.557 | 2 / 4 | 관련 기록/테스트 1/2 유지 | 회수 개선 |
+| Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 0.521 | 0.560 | 5 / 5 | Scanner 테스트 5→3 | 개선, 이전 비관련 제거 |
+| Kafka consumer 설정은 어디에 있나? | 없음 | 없음 | 0 / 0 | 관련 결과 없음 | 비관련 차단 유지 |
+| Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | 없음 | 0.544 | 0 / 5 | 보안 기록/예외 없음→1/2 | 복구 |
+| 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 0.635 | 0.590 | 5 / 5 | 관련 상위 유지 | 점수 하락에도 품질 유지 |
+| 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 0.541 | 0.617 | 5 / 5 | 탐지 서비스 5→Top-5 밖 | 구현 순위 퇴행 |
 
-## Findings
+## 관찰과 권고
 
-- Both previously missing Queries were recovered with clearly relevant results.
-- The nonexistent Kafka Query remained empty, so the instruction did not merely lift every Query over threshold.
-- Production-code priority improved for Project type and Embedding, and a prior irrelevant Unity match disappeared.
-- The instruction did not fix the vector migration false positive for Text-to-Vector.
-- It moved Chunking documentation above implementation and removed `ProjectDiscoveryService` from nested-discovery
-  Top-5. Search quality therefore improved overall but not uniformly.
-- Similarity scores rose for most Queries but fell for Text-to-Vector and UTF-8. Adoption is based on ranking and
-  recall, not score inflation.
+두 누락 질문을 복구하면서 Kafka는 0건을 유지했으므로 모든 점수만 일괄 상승시킨 결과는 아니다.
+타입/Embedding 구현 우선순위와 Unity 결과는 개선됐지만 Text-to-Vector의 Migration 오탐은 남았다.
+분할 문서가 구현보다 올라가고 `ProjectDiscoveryService`가 밀린 사례도 있어 개선은 균일하지 않다.
 
-## Recommendation
-
-Adopt this single instruction as a configurable Query-side default in the next implementation step while retaining
-Top-K 5 and threshold 0.45. Keep a raw-query switch for controlled evaluation and rollback. Do not adjust the
-threshold or Document embeddings at the same time.
+대부분 점수는 올랐지만 Text-to-Vector/UTF-8은 낮아졌다. 점수 자체보다 회수·순위로 판단했다.
+한 가지 지침을 설정 가능한 기본값으로 채택하되 Raw 전환을 남기고 threshold·문서 임베딩은
+동시에 바꾸지 않도록 다음 단계에 권고했다.

@@ -1,44 +1,33 @@
-# Decision 0015: Adopt similarity threshold 0.45
+# 0015. 유사도 임계값 0.45 채택
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted for Phase 6 Step 4.1. Top-K remains 5 and the default similarity threshold changes from 0.50 to 0.45.
+## 상태와 비교 조건
 
-## Controlled evaluation
+Phase 6 Step 4.1에서 승인했다. Top-K 5는 유지하고 .50→.45만 바꿨다.
+동일한 10질문과 208청크 `Local_Ai_Work` 인덱스를 사용했으며 instruction·질문 재작성·분할·정렬·corpus는 변경하지 않았다.
 
-The same ten Queries and the same 208-Chunk `Local_Ai_Work` index from Step 4 were used. Query instructions,
-rewriting, chunking, ranking, and the corpus were unchanged, so this comparison isolates the threshold effect.
-
-| Query | Results at 0.50 | Results at 0.45 | Relevant recovery | New irrelevant result |
+| 질문 | .50 | .45 | 관련 결과 복구 | 새 비관련 결과 |
 |---|---:|---:|---|---|
-| 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 5 | 5 | Not needed; ranking retained | None new |
-| 민감 파일을 어떻게 제외하나? | 0 | 0 | No | None |
-| 문서를 어떤 기준으로 Chunk로 나누나? | 5 | 5 | Not needed; ranking retained | None new |
-| 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 2 | 5 | Yes; `EmbeddingService.java` at 0.474 | No material new false positive |
-| 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0 | 2 | Yes; decision and repository test at 0.464/0.452 | None |
-| Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 3 | 5 | Scanner test recovered at 0.485 | One unrelated `StoredChunkMatch.java` at 0.494 |
-| Kafka consumer 설정은 어디에 있나? | 0 | 0 | Not applicable | None |
-| Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | 0 | 0 | No | None |
-| 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 5 | 5 | Not needed; ranking retained | None new |
-| 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 2 | 5 | Yes; discovery service and decisions at 0.477-0.485 | None |
+| 프로젝트 타입을 탐지하는 코드는 어디에 있나? | 5 | 5 | 기존 순위 유지 | 없음 |
+| 민감 파일을 어떻게 제외하나? | 0 | 0 | 복구 못함 | 없음 |
+| 문서를 어떤 기준으로 Chunk로 나누나? | 5 | 5 | 기존 순위 유지 | 없음 |
+| 텍스트를 Vector로 변환하는 코드는 어디에 있나? | 2 | 5 | EmbeddingService.java 0.474 복구 | 뚜렷한 증가 없음 |
+| 동일 프로젝트 재인덱싱 시 중복 저장을 어떻게 막나? | 0 | 2 | 기록/Repository 테스트 0.464/0.452 | 없음 |
+| Unity 캐시 폴더가 검색 대상에 안 들어가게 하는 부분 | 3 | 5 | Scanner 테스트 0.485 | StoredChunkMatch.java 0.494 1개 |
+| Kafka consumer 설정은 어디에 있나? | 0 | 0 | 해당 없음 | 없음 |
+| Workspace 밖으로 나가는 경로 접근은 어떻게 차단하나? | 0 | 0 | 복구 못함 | 없음 |
+| 잘못된 UTF-8 파일 하나가 전체 읽기를 중단하지 않게 하는 코드는? | 5 | 5 | 기존 순위 유지 | 없음 |
+| 중첩 폴더에서 실제 프로젝트 루트를 어떻게 찾나? | 2 | 5 | 탐지 서비스/기록 0.477~0.485 | 없음 |
 
-Top-1 and diagnostic Top-5 similarity values are unchanged from Decision 0014 because only the filter threshold
-changed. Across the ten Queries, Top-1 ranged from 0.343 to 0.637 and diagnostic Top-5 from 0.315 to 0.562.
+필터만 바꿔 진단 Top-1/Top-5 분포는 0014와 같았다. Top-1 .343~.637, Top-5 .315~.562였다.
 
-## Decision
+## 결정과 한계
 
-Adopt 0.45 as the new retrieval baseline:
+Embedding·재인덱싱·Unity·중첩 탐지의 관련 근거 회수가 개선됐고 기존 정상 질문 순위는 유지됐다.
+Kafka 최고 .383은 계속 0건이었으며 새 비관련은 Unity 결과 내 1개로 제한적이었다.
+이에 .45를 새 baseline으로 채택했다.
 
-- Relevant implementation or evidence was recovered for Embedding, reindexing, Unity exclusion, and nested discovery.
-- Queries already working at 0.50 retained their ranking and Top-K quality.
-- The nonexistent Kafka Query remained empty; its observed maximum similarity was 0.383.
-- Only one clear new irrelevant result was observed, within a five-result Unity Query that still contained relevant
-  results.
-- Sensitive-file filtering and Workspace-boundary Queries still return no result. Their relevant scores overlap the
-  absent-feature distribution, so lowering the global threshold further would trade precision for uncertain recall.
-
-## Consequence
-
-Threshold adjustment improved recall but did not solve all semantic misses. Do not lower below 0.45 based on this
-sample. The next isolated experiment should keep Top-K 5 and threshold 0.45 while testing a Query instruction; no
-instruction is applied in this decision.
+민감 파일/작업공간 경계는 여전히 0건이었다. 관련 점수가 없는 기능의 분포와 겹쳐 threshold만
+계속 낮추는 것은 적절하지 않다. 다음 단계에서는 .45/Top-K 5를 고정해 Query Instruction만
+실험하기로 했다. 이 결정 시점에는 instruction을 적용하지 않았다.

@@ -1,48 +1,31 @@
-# Decision 0031: Final hardening and portfolio release
+# 결정 0031: 배포 안정화와 포트폴리오 정리
 
-## Release strategy
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Phase 11 freezes the implemented RAG, Agent, Error and Automation behavior. Release work is
-limited to development startup, bounded validation and portfolio documentation. Prompts,
-models, retrieval parameters and backend feature boundaries remain unchanged.
+## 당시 배포 전략
 
-The release target is the local React/Vite web application plus `dev-start.ps1`. Tauri is
-deferred because Cargo is unavailable on the host and installing a desktop toolchain would
-increase release risk without improving the core demonstration.
+Phase 11은 RAG·Agent·오류·자동화 동작을 고정하고 개발 실행, 제한된 검증, 포트폴리오 문서만 정리했다. 프롬프트·모델·검색 설정·백엔드 기능 경계는 바꾸지 않았다.
 
-## Launcher boundary
+배포 대상은 React/Vite 웹 앱과 `dev-start.ps1`이었다. 당시 Cargo가 없어 Tauri를 보류했으며, 데스크톱 배포는 다음 단계에서 진행했다.
 
-The Launcher follows a fixed sequence: Docker readiness -> LocalRAG postgres -> Ollama and
-required-model check -> Backend -> Frontend -> optional browser open. Existing identified
-instances are reused. An unidentified listener on 18080 or 5173 returns `PORT_IN_USE` with
-owner details. Started/reused listener PIDs and logs are stored under ignored `.localrag/`.
+## 실행 도우미 경계
 
-Only `docker compose --file <repository compose.yml> up --detach postgres` is available.
-There is no remove/down/volume-delete, model pull, process stop, arbitrary command or Agent
-Tool integration. Failure codes identify Docker, PostgreSQL, Ollama/model, Backend, Frontend
-and port stages without default stack traces or secrets.
+Docker 준비 → LocalRAG PostgreSQL → Ollama/필수 모델 → 백엔드 → 프런트엔드 → 선택적 브라우저 실행 순서다. 식별된 기존 인스턴스는 재사용한다. 18080/5173의 미확인 프로세스는 소유 정보와 PORT_IN_USE를 반환한다. 시작/재사용 PID와 로그는 Git 제외 경로 `.localrag/`에 기록한다.
 
-## Visual and E2E validation
+컨테이너 명령은 `docker compose --file <repository compose.yml> up --detach postgres`로 제한한다. remove/down/볼륨 삭제, 모델 다운로드, 프로세스 종료, 임의 명령, Agent 도구 연결은 없다. 실패는 Docker·PostgreSQL·Ollama/모델·백엔드·프런트엔드·포트 단계별 코드로 표시하며 기본 응답에 스택 추적이나 비밀값을 노출하지 않는다.
 
-The gstack browse runtime was absent and unified browser control failed twice with the existing
-Windows workspace refresh error. The bounded fallback used installed Chrome via DevTools
-Protocol. It rendered all nine screens and the Similar Errors tab at 1440x1000 with
-`Local_Ai_Work` selected. Document-level horizontal overflow, unintended out-of-viewport
-elements and console errors were zero. Empty, disabled and status-badge states were present.
+## 화면과 종단 간 검증
 
-Final RAG returned SUCCESS with 5 Sources, 3 used and 0 invalid Citations in 17,561 ms.
-Progress returned SUCCESS in 25,508 ms. Error/Similar empty states succeeded. An Automation
-run with all model workflows disabled finished in 374 ms and produced history/notification
-rows. Agent Git was invoked once, but the external command harness again returned no captured
-JSON after completion; it remains PARTIAL and does not block release.
+gstack 브라우저 실행 환경이 없고 통합 브라우저 제어도 Windows 작업공간 새로고침 오류로 두 번 실패했다. 설치된 Chrome의 DevTools Protocol로 대체하여 Local_Ai_Work 선택 상태에서 9개 화면과 유사 오류 탭을 1440×1000으로 확인했다. 문서 가로 넘침·의도하지 않은 화면 밖 요소·콘솔 오류는 0이었다. 빈 상태, 비활성 상태와 상태 배지를 확인했다.
 
-## Dependency and release decision
+- RAG: SUCCESS, 출처 5개/사용 3개/잘못된 인용 0개, 17,561 ms.
+- 진행 상태: SUCCESS, 25,508 ms.
+- 오류/유사 오류: 빈 상태 확인.
+- 모델 흐름을 모두 끈 자동화: 374 ms, 실행 이력과 알림 후보 생성.
+- Agent Git: 한 번 호출했으나 외부 명령 실행기가 완료 후 JSON을 반환하지 않아 PARTIAL로 남겼다.
 
-`npm audit --audit-level=high` reported no High/Critical issue and retained two moderate
-Vitest toolchain advisories whose fix requires a breaking major upgrade. Gradle runtime
-dependencies resolved successfully; no backend CVE scanner is configured, so the release
-does not claim a complete backend vulnerability audit.
+## 의존성과 종료 판단
 
-The project is release-ready as a local portfolio application with documented limits:
-desktop-first 720px minimum layout, variable local-model latency, vector-only ranking,
-Agent capture PARTIAL, Tauri deferred, no native notifications, and no service stop command.
+`npm audit --audit-level=high`에서 High/Critical은 없었고 Vitest 개발 도구의 중간 심각도 권고 2건이 남았다. 수정에는 호환성이 바뀌는 주 버전 업그레이드가 필요했다. Gradle 런타임 의존성은 정상 해석됐으나 백엔드 CVE 검사기가 없어 전체 취약점 감사를 완료했다고 주장하지 않는다. 이 결과는 당시 점검값이며 최신 보안 점검 결과가 아니다.
+
+로컬 포트폴리오 앱으로 배포 가능하다고 판단하되 최소 너비 720px, 가변적인 모델 지연, 벡터 검색만 사용, Agent 결과 수집 PARTIAL, 당시 Tauri 보류, 네이티브 알림·서비스 종료 명령 미제공을 기록했다.

@@ -1,84 +1,76 @@
-# LocalRAG Portfolio Highlights
+# LocalRAG 포트폴리오 주요 근거
 
-All figures below come from implemented code, Decision Logs, automated tests, or bounded local
-evaluation. They are not production SLOs.
+문서 기준: 2026-09-28. 구현·테스트·설계 결정 기록으로 확인한 내용만 정리한다.
+과거 측정값은 당시 조건의 기록이지 운영 성능 목표나 현재 성능 보장이 아니다.
+상세 근거와 개인 기여 확인 항목은 [사실·근거 조사](portfolio-facts-audit.md)에 있다.
 
-## Product and architecture
+## 구현 범위
 
-1. Built the complete local knowledge path: safe file read -> structural Chunk -> Ollama
-   Embedding -> pgvector -> Project-scoped retrieval -> cited answer.
-2. Used deterministic Chunk IDs and transactional Project reindexing so unchanged rows stay
-   untouched while stale rows are removed only inside the selected Project.
-3. Added a read-only Multi-Tool Agent over bounded Git, Docker, database, Ollama and Log evidence.
-4. Connected Error Analysis, persistent Error History, Verification Audit and Similar Error
-   retrieval without treating model output as verified fact.
-5. Added evidence-based Progress/Activity and change-aware Automation. `NO_CHANGE` skips the
-   Progress and Activity model calls, avoiding roughly 34.9 seconds from their measured
-   18.5-second and 16.4-second baselines.
-6. Packaged the same React and Spring Boot application as a Windows Tauri Desktop app. The
-   wrapper bundles a fixed Backend JAR, reuses only an identified LocalRAG listener, and exposes
-   no general shell or filesystem permission.
+1. 정책을 통과한 파일 읽기 → 청크 → Ollama 임베딩 → pgvector → 프로젝트 범위 검색 → 출처 답변을 연결했다.
+2. 내용 기반 청크 ID와 트랜잭션으로 중복 저장·오래된 청크 삭제를 관리한다. 전체 재임베딩 방식이며 증분 임베딩은 아니다.
+3. Git, Docker, DB, Ollama, 로그를 제한된 범위에서 조회하는 읽기 전용 다중 도구 Agent를 구현했다.
+4. 오류 분석·이력·검증 감사·유사 오류 검색을 연결하고 모델 제안을 검증된 원인으로 자동 승격하지 않는다.
+5. 진행 상태·최근 작업과 변경 감지 자동화를 제공한다. `NO_CHANGE`에서는 두 요약 모델 호출을 생략한다.
+6. React/Spring Boot를 Tauri Windows 앱으로 패키징하고 고정 Backend JAR와 로컬 API 연결을 사용한다.
+7. 통합 채팅에서 안전한 실제 파일 근거를 보완하고 미완료 응답·근거 밖 일부 심볼을 성공으로 표시하지 않게 했다.
 
-## Retrieval decisions
+## 대표 의사결정과 문제 해결
 
-- Initial threshold 0.50 dropped relevant results. A controlled rerun kept corpus, Top-K and
-  Query unchanged and adopted 0.45 after recall improved while the nonexistent Kafka query
-  stayed empty.
-- A separate Query Instruction A/B evaluation recovered missing sensitive-file and Workspace
-  boundary results while Kafka remained empty. Raw Query mode remains available.
-- The 8,000-character Context budget counts headers, path, lines and content. A Chunk that does
-  not fit is excluded whole instead of truncated.
-- A no-result search skips qwen and returns deterministic `NO_EVIDENCE`.
+- 중첩 Unity 루트를 Container와 Project로 분리해 `Library` 제외 정책을 올바르게 적용했다.
+  당시 포함 파일은 8,614→680, 대형 후보는 1→0이었다. 검색 정확도나 처리 시간 개선율을 뜻하지 않는다.
+- 같은 10개 질문과 corpus, Top-K 5를 유지하고 임계값 .50→.45의 효과만 비교했다.
+  관련 결과 회수가 개선됐고 당시 Kafka 음성 질의는 0건을 유지했다.
+- 이후 별도 실험으로 Query Instruction을 비교했다. 민감 파일/작업공간 경계 결과를 복구했지만 일부 순위 퇴행도 기록했다.
+- RAG 문맥 8,000자는 출처 헤더까지 포함한다. 맞지 않는 청크는 중간에서 자르지 않고 제외한다.
+- RAG 전용 검색 결과가 없으면 `NO_EVIDENCE`로 모델 호출을 생략한다. 통합 채팅은 다른 근거도 사용할 수 있다.
+- 완료 메타데이터 검사와 한국어 조사까지 고려한 심볼 대조로 잘못된 성공 표시를 줄였다.
+  생성 중단 자체와 모든 의미 오류를 해결한 것은 아니다.
 
-## Security and failure isolation
+## 안전 설계의 범위
 
-- Project identity is a normalized Workspace-relative path, not an absolute path.
-- Canonical path checks block traversal and symbolic-link escape.
-- Sensitive names, generated directories, invalid UTF-8 and files above 5 MB are rejected.
-- One file or Project failure does not abort the remaining batch.
-- Tool arguments are scoped, command sets are fixed, outputs are bounded/redacted, and Agent
-  Tools cannot mutate Git, Docker, services or source.
-- The development Launcher can start only the LocalRAG postgres service and fixed local
-  executables. It contains no delete, model pull, process stop or arbitrary shell operation.
-- The Desktop API bridge is fixed to `127.0.0.1:18080`, `/api/**`, four HTTP methods and a 10 MB
-  response ceiling. External URLs, traversal, DELETE and arbitrary command execution are denied.
+프로젝트 ID는 작업공간 상대 경로다. 실제 경로 확인, 민감 이름/제외 폴더/5 MB/UTF-8 정책,
+파일·프로젝트별 실패 격리, 도구 명령·출력·시간 제한을 적용한다. 데스크톱은 고정된 서비스만 준비한다.
+로컬 API 연결은 `127.0.0.1:18080`, `/api/**`, 4개 HTTP 메서드와 응답 크기 한도로 제한한다.
 
-## Measured release baseline
+이것이 모든 비밀값 탐지·모든 링크 경쟁 조건 차단·인증된 다중 사용자 보안을 의미하지는 않는다.
+Agent의 읽기 전용 정책과 앱의 인덱스/이력 저장·시작 제어 권한도 구분해야 한다.
 
-Latest validation on the local Windows host on 2026-09-18:
+## 최종 검증 기록 — 2026-09-28
 
-- Backend: 180 tests across 67 suites, zero failures/errors, one opt-in live test skipped.
-- Frontend: 13 tests across 8 files; Rust startup/lifecycle/security: 10 tests.
-- Vite production build: 55 modules; JS 281.24 kB / gzip 85.11 kB;
-  CSS 24.69 kB / gzip 5.99 kB.
-- Tauri production executable and unsigned NSIS installer regenerated.
-- Whole-workspace metadata: 13 Projects in 2,680 ms, four bulk DB queries, no LLM.
-- Production cold start passed after external Docker socket recovery; all runtime stages were
-  started by the exe. The initial post-reboot attempt failed in Docker itself, not in LocalRAG.
-- Latest RAG: SUCCESS, 5 Sources, 17.7 s. Agent: SUCCESS, getGitStatus, 28.6 s LLM.
-- Actual production WebView smoke: 13 Projects rendered; `Local_Ai_Work` Dashboard available;
-  RAG SUCCESS with 5 Sources; Agent used `getGitStatus`; Error History and Progress rendered;
-  Automation Run Now returned SUCCESS with LLM skipped.
-- Real RAG Project-type query: SUCCESS, 5 retrieved Sources, 3 cited/used, 0 invalid
-  Citations, 17,561 ms total.
-- Real Progress analysis: SUCCESS, 21,573 ms LLM and 25,508 ms total.
-- Automation with model workflows disabled: SUCCESS, no LLM call, 374 ms.
-- Chrome at 1440x1000: Dashboard plus eight feature screens and Similar Errors rendered with
-  zero document-level horizontal overflow and zero console errors.
-- Launcher normal and repeat runs reused Docker/Ollama/PostgreSQL and identified existing
-  Backend/Frontend without duplicate starts.
+- Backend: 72개 suite, 215개 실행 사례 중 214 통과 / 선택적 실모델 평가 1개 제외 / 실패 0.
+- Frontend: 11개 파일의 43개 테스트 통과. Rust: 10개 테스트 통과.
+- Vite/Tauri/NSIS 재빌드 완료. 해시는 `build/release-20260928-manifest.json`에 기록했다.
+- 실제 질문은 5개를 한 번씩만 평가했다. 미완료 Unity 답변과 부재 심볼 차단을 확인했지만
+  실제 Spring 클래스 설명의 의미 혼동과 일반 HashMap 답변의 지식 오류가 남았다.
+- 기능·품질 개발은 이 한계를 기록한 상태로 종료했다. 종료가 완벽한 답변 품질을 뜻하지 않는다.
 
-## Honest limitations
+## 과거 배포 측정 — 2026-09-18
 
-- Vector-only ranking still allows documentation, tests or migrations to outrank implementation.
-- Model latency and output quality vary; verified state never depends solely on prose quality.
-- The earlier Agent capture limitation was resolved: the latest production UI smoke captured
-  both the answer and getGitStatus trace without another quality tuning cycle.
-- Docker Desktop can fail after reboot on stale AF_UNIX sockets. Recovery required an explicit,
-  separate maintenance approval; it is not hidden in the app startup logic. The application
-  reports timeout/failure and offers Retry. Unconditional post-reboot one-click remains blocked
-  by this external issue.
-- Desktop requires external Java 17. A Tauri-started Backend is left running for safe reuse when
-  the Window closes because no unauthenticated shutdown endpoint or forced kill was added.
-- Native notifications, Hybrid Search, reranking, streaming and cloud deployment are not part of
-  this release.
+다음은 원래 측정 기록을 보존한 값이며 위 최종 검증과 합산하지 않는다.
+
+| 항목 | 당시 결과 |
+|---|---|
+| Backend | 67개 suite, 180개 사례, 실패/오류 0, 선택적 실모델 1개 제외 |
+| Frontend / Rust | 8개 파일 13개 / 10개 테스트 |
+| Vite | 55개 모듈; JS 281.24 kB / gzip 85.11 kB, CSS 24.69 kB / gzip 5.99 kB |
+| 작업공간 개요 | 13개 프로젝트, 2,680 ms, DB 일괄 조회 4회, LLM 없음 |
+| 시작 | Docker 소켓을 외부에서 복구한 뒤 exe 단독으로 전체 서비스 준비 통과 |
+| RAG / Agent | SUCCESS, 출처 5개, 17.7초 / getGitStatus, LLM 28.6초 |
+| RAG 프로젝트 유형 질문 | 출처 5개, 인용 사용 3개, 잘못된 ID 0개, 전체 17,561 ms |
+| 진행 상태 분석 | LLM 21,573 ms / 전체 25,508 ms |
+| 자동화(모델 작업 비활성) | SUCCESS, LLM 없음, 374 ms |
+| 배포 WebView | 13개 프로젝트·대시보드·RAG·Agent 답변/도구·오류 이력·진행 상태·자동화 확인 |
+| Chrome 1440×1000 | 대시보드와 8개 기능 화면·유사 오류, 가로 넘침/콘솔 오류 0 |
+| 반복 실행 | Docker/Ollama/PostgreSQL 및 확인된 Backend/Frontend를 중복 시작하지 않고 재사용 |
+
+과거 Progress 18.5초 + Activity 16.4초 기록은 합계 약 34.9초다. `NO_CHANGE`는 이 두 호출을
+생략하지만 실행당 항상 34.9초가 절약된다는 통제 실험 결과는 아니다.
+
+## 남은 한계
+
+- 문서·테스트·Migration이 구현 코드보다 높은 순위에 노출될 수 있다.
+- Citation ID·정상 종료·테스트 통과는 답변의 의미 정확도를 보장하지 않는다.
+- 로컬 모델 지연은 질문, 모델 준비 상태, CPU/GPU 부하에 따라 달라진다.
+- Docker Desktop의 재부팅 후 오래된 AF_UNIX 소켓 오류는 외부 환경 문제다. 앱은 초기화하지 않고 오류·재시도를 안내한다.
+- 외부 Java 17 등이 필요하고 앱 종료 후 공용 Backend를 유지한다. 서명 없는 설치 파일에는 SmartScreen 경고가 가능하다.
+- 네이티브 알림 전달, Hybrid Search, reranker, Streaming, 클라우드 운영은 이번 구현 범위가 아니다.

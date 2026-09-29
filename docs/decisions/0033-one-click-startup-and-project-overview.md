@@ -1,150 +1,77 @@
-# Decision 0033 — One-click startup and Project overview
+# 결정 0033: 원클릭 시작과 프로젝트 요약
 
-Date: 2026-09-18
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-## Scope and decision
+일자: 2026-09-18. 후속 자동 시작 검증: 2026-09-21.
 
-Make the installed Windows application prepare already-installed runtimes and expose cheap
-Project metadata. Preserve Java 17, models, RAG/Agent prompts, retrieval and scheduler policies.
-No install automation, model pull, Git push, container deletion or volume reset was added.
+## 범위와 결정
 
-Window → asynchronous native worker → Docker → PostgreSQL → Ollama → model tags → Backend
-→ Dashboard. Per-stage states replace percentages. Failed stages retain their reason and
-later stages remain WAITING. Retry is serialized and reuses healthy runtimes.
+설치된 Windows 앱이 이미 설치된 실행 환경을 준비하고 저비용 프로젝트 메타데이터를 보여준다. Java 17, 모델, RAG/Agent 프롬프트, 검색/스케줄 정책은 유지했다. 프로그램 설치, 모델 다운로드, Git push, 컨테이너 삭제, 볼륨 초기화는 추가하지 않았다.
 
-Docker is invoked through its fixed installation CLI; Engine access uses only the local named
-pipe. Background start is requested with desktop start --detach. Docker may still display its
-own Dashboard or error dialog. Java/Ollama/CLI consoles are hidden.
+창 표시 → 비동기 네이티브 작업 → Docker → PostgreSQL → Ollama → 모델 목록 → 백엔드 → 대시보드 순서다. 퍼센트 대신 단계별 상태를 표시한다. 실패 이유를 남기고 뒤 단계는 WAITING으로 유지한다. 재시도는 직렬화하고 정상 서비스를 재사용한다.
 
-Only local-ai-postgres with local_ai_work/postgres Compose labels may be started. MISSING uses
-the bundled repository compose.yml with the same project/volume namespace, postgres only,
---no-deps and --pull never. Foreign ownership and UNHEALTHY are failures. Model tags are exact.
-Java 17 is resolved from JAVA_HOME/PATH, checked, and executes only the bundled fixed JAR.
-Port 18080 requires LocalRAG health identity; older LocalRAG can be identified with discovery.
+Docker는 고정 설치 CLI와 로컬 named pipe만 사용하며 `desktop start --detach`로 시작한다. Docker 자체 창은 나타날 수 있지만 Java/Ollama/CLI 콘솔은 숨긴다. `local_ai_work`/`postgres` Compose 레이블이 맞는 `local-ai-postgres`만 시작한다. 없으면 동봉된 compose.yml의 같은 프로젝트/볼륨 이름으로 postgres만 `--no-deps`, `--pull never`로 생성한다. 다른 소유권과 UNHEALTHY는 실패다. 모델 이름은 정확히 비교한다.
 
-Polling budgets: Docker 180 s, PostgreSQL 90 s, Ollama 60 s, models 5 s, Backend 90 s.
-Each native command/request is bounded, including the output reader. An in-flight command may
-extend a stage deadline by its own bounded duration. The frontend stops after 510 polls.
-App closing does not stop shared runtimes. The app never kills existing services; timeout
-cleanup only terminates its own short-lived command.
+Java 17을 JAVA_HOME/PATH에서 확인해 고정된 JAR만 실행한다. 18080은 LocalRAG health로 식별하고 구버전은 탐지 API로 보완한다. 준비 제한은 Docker 180초, PostgreSQL 90초, Ollama 60초, 모델 5초, 백엔드 90초다. 출력 읽기까지 각 명령/요청을 제한하되 진행 중 명령의 자체 제한만큼 단계 시간이 연장될 수 있다. 프런트엔드는 510회 확인 후 중단한다. 창을 닫아도 공유 서비스는 종료하지 않고 시간 초과 정리는 소유한 단기 명령에만 적용한다.
 
-## Java 17 packaging defect found
+## Java 17 리소스 경로 문제
 
-The actual production resource path had a Windows verbatim prefix. Java 17 failed to open the
-JAR even though it existed. Normalize local/UNC resource paths before passing them to Java.
-Add a regression test. The actual bundled Backend subsequently reached READY in about 7 s.
+실제 Windows 리소스 경로의 verbatim 접두사 때문에 Java 17이 존재하는 JAR를 열지 못했다. Java에 전달하기 전 로컬/UNC 경로를 정규화하고 회귀 테스트를 추가했다. 이후 동봉 백엔드는 약 7초 만에 READY에 도달했다.
 
-## Dashboard and Git evidence
+## 대시보드와 Git 근거
 
-GET /api/workspaces/overview discovers once and executes four bulk metadata queries, then
-bounded Git reads per repository. One frontend request populates all Projects and details.
-There is no per-row HTTP fan-out, LLM, vector retrieval or automatic indexing.
+`GET /api/workspaces/overview`는 한 번 탐지하고 DB 일괄 메타데이터 쿼리 4개와 제한된 저장소별 Git 조회를 실행한다. 프런트엔드 요청 한 번으로 목록/상세를 채운다. 행별 추가 HTTP, LLM, 벡터 검색, 자동 인덱싱은 없다.
 
-Counts include distinct indexed paths/documents and chunks, errors, notification candidates,
-and stored automation enablement. Component failures produce UNKNOWN/null and warnings.
-Project list scrolls within 340 px. Detail selection uses already-returned metadata.
+고유 인덱싱 경로/문서·청크, 오류, 알림 후보, 저장된 자동화 활성 상태를 센다. 일부 실패는 UNKNOWN/null과 경고다. 목록은 340px 내부에서 스크롤하며 상세는 받은 값을 사용한다.
 
-Push status checks commit ancestry against the configured upstream SHA; divergence uses the
-same upstream. CLEAN/DIRTY is independent. Missing upstream/ref and command failure are not
-treated as pushed/unpushed. References are local snapshots; no automatic fetch is performed.
-Unborn branches retain the actual branch name. Hashes are 15 px monospace, copyable, with
-full-SHA titles; metadata is 13–14 px and badges 12 px.
+push 상태와 ahead/behind는 설정된 upstream SHA의 조상 관계로 판단하고 CLEAN/DIRTY와 분리한다. upstream/ref 누락이나 명령 실패를 push 완료/미완료로 추정하지 않는다. 자동 fetch가 없어 로컬 참조는 오래됐을 수 있다. 최초 커밋 전에도 실제 브랜치 이름을 유지한다. 당시 해시는 15px 고정폭/전체 SHA 복사·툴팁, 메타데이터 13~14px, 배지 12px였다.
 
-## External Docker problem and bounded recovery
+## Docker 외부 문제와 명시적 복구
 
-The initial 2026-09-17 and post-reboot 2026-09-18 attempts failed inside Docker Desktop 4.79:
-stale dockerInference / engine.sock AF_UNIX reparse points could not be removed by Docker.
-LocalRAG showed FAILED after its timeout. This is not a successful unconditional cold boot.
-Related upstream report: https://github.com/docker/desktop-feedback/issues/460
+2026-09-17 최초 및 09-18 재부팅 후 Docker Desktop 4.79 자체가 오래된 dockerInference/engine.sock AF_UNIX 재분석 지점을 제거하지 못해 실패했다. LocalRAG는 제한 시간 후 FAILED였다. 무조건적인 콜드 시작 성공이 아니다. 관련 보고: [Docker 문제 460](https://github.com/docker/desktop-feedback/issues/460).
 
-The user separately approved safe Docker recovery. Only processes started for this verification
-were stopped; runtime socket directories were renamed for recovery, never deleted.
-Backups under %LOCALAPPDATA%:
+사용자가 별도 승인한 복구에서 해당 검증을 위해 시작한 프로세스만 종료하고 소켓 디렉터리를 삭제 대신 이름 변경으로 보존했다. `%LOCALAPPDATA%` 아래 백업:
 
-- Docker/run.localrag-recovery-20260917 (and -2, -3)
+- Docker/run.localrag-recovery-20260917 (및 -2, -3)
 - Docker/run.localrag-recovery-20260918
-- docker-secrets-engine.localrag-recovery-20260917 (and -2)
+- docker-secrets-engine.localrag-recovery-20260917 (및 -2)
 - docker-secrets-engine.localrag-recovery-20260918
 
-No Docker data directory, container, volume or settings reset occurred. Existing older backup
-directories were untouched. This repair is deliberately not part of automatic startup. An OS/
-Docker fix is still needed to guarantee repeatable post-reboot startup without maintenance.
+Docker 데이터·컨테이너·볼륨·설정을 초기화하지 않았고 기존 백업도 건드리지 않았다. 복구는 자동 시작 기능에 포함하지 않았다. 재부팅 후 반복 성공을 보장하려면 외부 문제 해결이 필요하다.
 
-## Verification
+## 09-18 검증
 
-- Backend: 180 tests / 67 suites, failures 0, errors 0, one opt-in live skip.
-- Frontend: 13 tests / 8 files pass; production build pass.
-- Rust: 10 tests pass: reuse, needed starts, missing model, timeout/retry, conflict, foreign
-  container, exact model names, Java paths, inherited stdout timeout and API path/method checks.
-- Actual production Window appears before dependencies. After socket recovery, all services
-  were stopped; exe automatically prepared Docker, existing stopped PostgreSQL, Ollama, both
-  models and bundled Backend. ONE_CLICK_STARTUP=PASS_AFTER_ENVIRONMENT_RECOVERY.
-- Missing models / foreign port and abstract start-needed transitions are deterministic tests.
-  The native MISSING PostgreSQL creation branch was implemented but not exercised by deleting
-  an existing container. Existing models and unrelated ports/processes were not disturbed.
-- Workspace summary: 13 Projects, 2,680 ms. Local_Ai_Work: 151 documents / 259 chunks.
-- 1440×1000 actual WebView: Project list/detail, scroll 1274 px within 340 px, hash 15 px,
-  no positive horizontal overflow and no console errors.
-- RAG once: SUCCESS, 5 Sources, 17.7 s. Agent once: SUCCESS, getGitStatus, 28.6 s LLM.
-  No retrieval/prompt/model tuning and no repeated live quality evaluation.
-- Computer Use helper failed initialization; actual production WebView was exercised over
-  local CDP using the developer-only desktop-smoke.mjs harness. Generated evidence is ignored
-  under build/desktop-qa, not bundled.
-- Production exe and NSIS installer built. Installer installation/signing remains unverified.
-- Final UI verified both PUSHED (Room frontend) and UNPUSHED (Local_Ai_Work), actual inner
-  scroll, and Settings Retry: Backend PID stayed 9080 and every runtime was reused.
+- 백엔드 180개/67개 묶음, 실패·오류 0, 선택 실행 1개 제외. 프런트엔드 13개/8파일 및 빌드 통과. Rust 10개 통과.
+- Rust 검증: 재사용, 시작 필요, 모델 누락, 시간 초과/재시도, 충돌, 타 소유 컨테이너, 모델 정확 일치, Java 경로, 상속 stdout 시간 초과, API 경로/메서드.
+- 의존 서비스보다 창이 먼저 표시됐다. 소켓 복구 후 모든 서비스를 끈 상태에서 exe가 Docker, 기존 PostgreSQL, Ollama, 모델 확인, 동봉 백엔드를 준비했다. `ONE_CLICK_STARTUP=PASS_AFTER_ENVIRONMENT_RECOVERY`.
+- 모델 누락/타 포트/추상 시작 분기는 고정 테스트다. 기존 컨테이너를 삭제해 MISSING 생성 분기를 실험하지 않았다. 모델·무관한 프로세스/포트는 보존했다.
+- 프로젝트 13개 요약 2,680 ms. Local_Ai_Work 문서 151개/청크 259개.
+- 실제 WebView 1440×1000에서 340px 안의 1274px 목록 스크롤, 상세, 15px 해시, 가로 넘침/콘솔 오류 0 확인.
+- RAG 1회 SUCCESS/출처 5개/17.7초. Agent 1회 SUCCESS/getGitStatus/LLM 28.6초. 품질 반복 평가나 설정 튜닝은 하지 않았다.
+- 화면 제어 초기화 실패로 개발용 desktop-smoke.mjs의 로컬 CDP를 사용했다. 근거는 Git 제외 build/desktop-qa에 두고 배포하지 않았다.
+- exe/NSIS 빌드 성공. 설치 프로그램 실행과 서명은 미검증이다.
+- Room 프런트엔드 PUSHED, Local_Ai_Work UNPUSHED, 실제 내부 스크롤, Settings Retry 확인. 백엔드 PID 9080을 유지하고 모든 서비스를 재사용했다.
 
-## Runtime classification and limits
-
-| Runtime | Classification | Responsibility |
+| 구분 | 대상 | 책임 |
 | --- | --- | --- |
-| React UI / bundled Backend JAR / startup worker | INTERNAL | Packaged application |
-| Docker Desktop Engine / LocalRAG PostgreSQL / Ollama | BACKGROUND_MANAGED | Reuse/start only |
-| Java 17 / WebView2 / installed Docker and Ollama / models / pgvector image | USER_PREREQUISITE | Must already be installed |
+| INTERNAL | React UI, 동봉 백엔드 JAR, 시작 작업 | 앱에 포함 |
+| BACKGROUND_MANAGED | Docker Engine, LocalRAG PostgreSQL, Ollama | 재사용·시작만 |
+| USER_PREREQUISITE | Java 17, WebView2, Docker/Ollama 설치, 모델, pgvector 이미지 | 사전 준비 필요 |
 
-Docker socket recurrence and possible Docker UI visibility are external limitations, not hidden
-successes. Existing shared services remain running after app close. Unsigned installer may
-trigger SmartScreen. No push was performed; implementation and docs are committed separately.
+공유 서비스는 창 종료 후 유지된다. Docker 소켓 재발·자체 창 표시는 외부 한계이며 설치 파일은 서명되지 않았다. 당시 구현/문서는 별도 커밋했고 push는 하지 않았다.
 
-## Follow-up verification — 2026-09-21
+## 09-21 자동 시작 재검증
 
-Scope: production Docker auto-start verification only, no application/UI/RAG changes.
-Docker Desktop 4.79.0 was stopped with its official CLI; no LocalRAG, Backend or Docker
-process remained and the Engine pipe was absent. PostgreSQL already existed and was stopped.
-The operator never started Docker manually during either attempt.
+코드/UI/RAG 수정 없이 Docker 자동 시작만 확인했다. 공식 CLI로 Docker Desktop 4.79.0을 종료한 후 LocalRAG/백엔드/Docker 프로세스와 Engine pipe가 없음을 확인했다. 기존 PostgreSQL은 중지 상태였다. 두 시도 모두 사용자가 Docker를 수동 실행하지 않았다.
 
-- First exe launch: 15:31:32 KST; Window detected after 121 ms. LocalRAG launched Docker,
-  but at 15:31:34 Docker logged `initializing Secrets Engine` / `engine.sock` /
-  `The file cannot be accessed by the system`. Engine readiness never succeeded.
-- LocalRAG reported Docker FAILED / UNAVAILABLE at 15:34:39 (about 186 s after the first
-  sampled STARTING state). Downstream stages remained WAITING. This is a Docker internal
-  stale-runtime failure (B/C); timeout (E) is its consequence, not evidence of a short budget.
-  No independent LocalRAG orchestration defect or permission denial was established.
-- Docker's graceful stop failed in this crashed state. Only Docker processes created during
-  this test were terminated after executable-path/start-time checks. Socket-only directories
-  were renamed to `Docker/run.localrag-verification-20260921-1535` and
-  `docker-secrets-engine.localrag-verification-20260921-1535` under LOCALAPPDATA.
-  Both original runtime directories were verified empty. No container, volume, Docker data
-  directory, setting or application code was deleted/changed.
-- Second exe-only launch: 15:36:44 KST; Window detected after 126 ms; all stages READY at
-  15:37:24 (about 40 s). Docker, PostgreSQL, Ollama and Backend were automatically started;
-  both preinstalled models were confirmed. Backend PID 24248, health UP. Dashboard rendered
-  13 Projects with zero observed console errors.
-- PostgreSQL container ID remained
-  `6ee48dc093b20644fd3c8703b709cafe5876a14284fcf01565bc2b48a616ac8c`;
-  volume remained `local_ai_work_local_ai_postgres_data`; all eight volume names were retained.
-  Other previously running services returned through Docker's own restart policies.
-- Recovered run: DOCKER_AUTO_START=PASS, ONE_CLICK_STARTUP=PASS. Original unrepaired run:
-  FAIL. This does not establish a permanent fix or guaranteed post-reboot success.
+1. 15:31:32 KST exe 실행, 121 ms 후 창 확인. Docker는 자동 실행됐지만 15:31:34 로그에 `initializing Secrets Engine`, `engine.sock`, `The file cannot be accessed by the system`이 기록됐다. Engine은 준비되지 않았다.
+2. 15:34:39 Docker FAILED/UNAVAILABLE, 최초 STARTING 관찰 후 약 186초. 뒤 단계는 WAITING. Docker 자체/오래된 런타임 문제(B/C)이며 시간 초과(E)는 결과다. 별도 LocalRAG 제어 결함이나 권한 거부는 입증되지 않았다.
+3. Docker 정상 종료도 실패하여 경로/시작 시각을 확인한 이번 테스트 프로세스만 종료했다. LOCALAPPDATA의 소켓 전용 폴더를 `Docker/run.localrag-verification-20260921-1535`, `docker-secrets-engine.localrag-verification-20260921-1535`로 변경 보존했다. 원래 경로가 비었음을 확인했고 컨테이너·볼륨·데이터·설정·코드는 삭제/변경하지 않았다.
+4. 15:36:44 exe만 재실행, 126 ms 후 창 확인, 15:37:24 모든 단계 READY(약 40초). Docker/PostgreSQL/Ollama/백엔드 자동 시작과 두 모델을 확인했다. 백엔드 PID 24248, health UP, 프로젝트 13개, 관찰된 콘솔 오류 0.
+5. 컨테이너 ID `6ee48dc093b20644fd3c8703b709cafe5876a14284fcf01565bc2b48a616ac8c`, 볼륨 `local_ai_work_local_ai_postgres_data`, 전체 볼륨 이름 8개를 유지했다. 다른 기존 서비스는 Docker의 재시작 정책으로 복귀했다.
 
-Do not auto-rename Docker internals merely because no process is visible, Engine is unreachable
-and a socket exists. Healthy sockets have the same filesystem attributes; stale detection needs
-fresh matching failure evidence and remains vulnerable to a concurrent Docker launch. Keep
-explicit maintenance separate from startup. Existing FAILED/Retry behavior remains unchanged;
-the generic readiness error does not yet expose a dedicated stale-socket diagnostic code.
+복구 후 실행은 DOCKER_AUTO_START=PASS, ONE_CLICK_STARTUP=PASS지만 복구 전은 FAIL이다. 영구 해결이나 재부팅 후 성공 보장은 아니다.
 
-Evidence: Docker host backend log; ignored `build/desktop-qa/startup-failed-20260921.json`,
-`startup-failed-20260921.png`, `startup-recovered-20260921.json`, `dashboard.json` and
-`dashboard.png`. Native Computer Use initialization failed twice; the existing production
-WebView observer was used instead. Only two cold-start attempts were made; no model quality
-evaluation or full test-suite rerun was needed because application code was not changed.
+프로세스 없음+Engine 연결 불가+소켓 존재만으로 Docker 내부 폴더를 자동 변경하지 않는다. 정상 소켓도 같은 속성이며 새로운 일치 오류 근거가 필요하고 동시 시작 경쟁도 있다. 명시적 유지보수와 시작 기능을 분리한다. FAILED/Retry는 유지하되 전용 오래된 소켓 진단 코드는 없다.
+
+근거는 Docker 호스트 로그와 Git 제외 `build/desktop-qa/startup-failed-20260921.json`, `startup-failed-20260921.png`, `startup-recovered-20260921.json`, `dashboard.json`, `dashboard.png`다. 화면 제어 초기화 두 번 실패 후 기존 WebView 관찰기를 사용했다. 콜드 시작은 두 번만 수행했고 코드 변경이 없어 모델 평가/전체 테스트를 반복하지 않았다.

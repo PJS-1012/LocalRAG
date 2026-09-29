@@ -1,4 +1,6 @@
-# Decision Log 0001: Java 및 Framework 기준 버전
+# 결정 0001: Java와 프레임워크 기준 버전
+
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
 ## 문제
 
@@ -10,7 +12,7 @@
 
 ## 후보
 
-- Java 21 + 최신 Framework 조합
+- Java 21 + 당시 최신 프레임워크 조합
 - Java 17 + Spring Boot 4.x + Spring AI 2.x
 - Java 17 + Spring Boot 3.5.x + Spring AI 1.1.x
 
@@ -18,7 +20,7 @@
 
 - Java 17
 - Spring Boot 3.5.16
-- Spring AI 1.1.8 (Phase 3부터 필요한 모듈만 도입 예정)
+- Spring AI 1.1.8 (당시 계획: Phase 3부터 필요한 모듈만 도입, 이후 적용 완료)
 - Gradle Wrapper 8.14.3
 
 ## 이유
@@ -27,4 +29,4 @@ Spring Boot 3.5.16은 Java 17과 Gradle 8.x를 공식 지원한다. Spring AI 1.
 
 ## 결과
 
-Gradle이 Java 17.0.17을 사용해 전체 테스트와 빌드를 완료했다. Spring Boot 3.5.16 애플리케이션의 커스텀 Health API와 Actuator Health가 모두 `UP`을 반환했다.
+Gradle이 Java 17.0.17을 사용해 전체 테스트와 빌드를 완료했다. Spring Boot 3.5.16 애플리케이션의 사용자 정의 상태 API와 Actuator Health가 모두 `UP`을 반환했다.

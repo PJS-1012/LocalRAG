@@ -1,34 +1,40 @@
-# 0005. Workspace project discovery and file scan boundary
+# 0005. 작업공간 프로젝트 탐지와 파일 탐색 경계
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Problem
+승인됨. 초기 탐지 정책 기록이다. 직계 폴더만 탐지하던 제약은
+[0009](0009-depth-one-project-root-discovery.md)에서 보정했다.
 
-LocalRAG must find heterogeneous projects without scanning the whole machine, guessing a framework from Git alone, or ingesting generated, sensitive, binary, and oversized files.
+## 문제
 
-## Decision
+PC 전체를 검색하거나 Git만으로 프레임워크를 추정하지 않고, 서로 다른 종류의 프로젝트를
+찾아야 한다. 생성물·민감 파일·바이너리·대형 파일을 수집 대상에서 제외해야 한다.
 
-Use `C:/workspace` as the configurable Workspace root and consider only its direct child directories as Project candidates.
+## 결정
 
-Detect a Project type from multiple structural hints:
+설정 가능한 기본 작업공간을 `C:/workspace`로 두고 당시에는 직계 디렉터리만 프로젝트 후보로 삼았다.
 
-- Unity requires `Assets`, `ProjectSettings`, and `Packages/manifest.json`.
-- Java requires a Gradle or Maven build file and `src/main/java`; build-file content may refine it to Spring Boot.
-- Node.js, .NET, and Python use their own manifest and source-layout hints.
-- A Git directory is metadata only and does not imply a framework.
+- Unity: `Assets`, `ProjectSettings`, `Packages/manifest.json`을 모두 확인한다.
+- Java: Gradle/Maven 빌드 파일과 `src/main/java`를 확인하고 빌드 파일 내용으로 Spring Boot를 구분한다.
+- Node.js, .NET, Python: 각 생태계의 manifest/build marker를 사용한다. 세부 기준은 `ProjectTypeDetector`에 있다.
+- Git 디렉터리는 메타데이터일 뿐 프레임워크 판별 근거가 아니다.
 
-Before reading content, scan metadata and classify every regular file. Apply common directory, path, binary, secret, and extension exclusions. Apply Unity generated-directory exclusions only to Unity projects. The initial supported-file size limit is configurable and defaults to 5MB.
+본문을 읽기 전에 일반 파일의 메타데이터를 분류한다. 공통 디렉터리·경로·바이너리·민감 이름·확장자
+정책을 적용하고 Unity 생성 폴더는 Unity 프로젝트에만 제외한다. 초기 크기 상한은 설정 가능한 5 MB다.
 
-The configured relative exclusion `logs/archive` matches only that path from the Project root. A different directory named `archive` remains eligible, preventing an overly broad name-based exclusion.
+상대 제외 경로 `logs/archive`는 프로젝트 루트 기준 그 경로만 일치한다.
+다른 위치의 `archive`까지 이름만 보고 제외하지 않는다.
 
-## Consequence
+## 결과
 
-Project discovery cannot escape the configured Workspace root or descend into nested repositories as separate Projects. The scan reports supported, excluded, too-large, and metadata-failed counts plus details for oversized files, but does not yet read, parse, chunk, embed, or persist file content.
+당시 탐지는 지정 작업공간 밖으로 나가지 않고 중첩 저장소를 별도 프로젝트로 탐지하지 않았다.
+탐색 결과는 지원·제외·대형·메타데이터 실패 수와 대형 파일 상세를 제공한다.
+본문 읽기·청크·임베딩·영속화는 이 단계에서 하지 않았다.
 
-Actual Phase 5 verification detected:
+실제 Phase 5 확인 결과:
 
-- `Local_Ai_Work` as Java with Spring Boot.
-- `DungeonMerchant` as Unity.
-- Unity-generated directories including `Library`, `Logs`, and `UserSettings` were excluded.
+- `Local_Ai_Work`: Java / Spring Boot.
+- `DungeonMerchant`: Unity.
+- Unity의 `Library`, `Logs`, `UserSettings` 등 생성 폴더 제외 확인.

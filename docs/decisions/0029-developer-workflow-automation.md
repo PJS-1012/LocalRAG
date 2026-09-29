@@ -1,100 +1,64 @@
-# Decision 0029: Developer workflow automation
+# 결정 0029: 개발 흐름 자동화
 
-## Scope and architecture
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Phase 9 adds persistent, read-only automation around the Phase 8 services:
+## 범위와 구조
+
+Phase 9는 Phase 8 서비스를 재사용하는 읽기 전용 자동화와 실행 이력 저장을 추가했다.
 
 ```text
-Project configuration -> due-project poller -> local per-project lock
-  -> cheap project/error/environment evidence
-  -> changed: existing Progress and Activity services
-  -> run history and notification candidates
-  -> unchanged: NO_CHANGE without an LLM call
+프로젝트 설정 -> 실행 시각 확인 -> 프로세스 내부 프로젝트별 중복 실행 차단
+  -> 저비용 프로젝트/오류/환경 근거 수집
+  -> 변경 있음: 기존 진행 상태·최근 작업 분석 -> 실행 이력·알림 후보
+  -> 변경 없음: LLM을 호출하지 않고 NO_CHANGE
 ```
 
-Manual and scheduled execution share `AutomationExecutionService`. Automation never edits
-code, executes arbitrary shell, writes Git state, starts or stops Docker/Ollama, or promotes
-an LLM answer to verified Error History.
+수동/예약 실행은 AutomationExecutionService를 공유한다. 자동화는 코드 수정, 임의 셸, Git 변경, Docker/Ollama 시작·종료, 모델 답변의 검증된 오류 이력 승격을 수행하지 않는다.
 
-## Configuration and scheduler
+## 설정과 스케줄
 
-Project configuration is stored in PostgreSQL. The baseline schedule is an interval rather
-than cron: 60 seconds minimum, seven days maximum. A Spring fixed-delay poller wakes every
-30 seconds and selects enabled rows whose `nextRunAt` is due. Runs are sequential and a
-Project failure is caught so the next Project continues.
+프로젝트 설정은 PostgreSQL에 저장한다. cron이 아닌 주기 방식으로 최소 60초, 최대 7일이다. Spring fixed-delay 확인 작업이 30초마다 활성화되고 nextRunAt이 지난 설정을 선택한다. 프로젝트를 순차 처리하며 한 프로젝트 실패가 다음 실행을 막지 않는다.
 
-No Redis, queue or distributed lock is added. A process-local concurrent set prevents two
-runs for the same Project. This is sufficient for one LocalRAG process and must be revisited
-for multi-instance execution.
+Redis·큐·분산 잠금은 추가하지 않았다. 프로세스 내부 동시성 집합으로 같은 프로젝트 중복 실행을 막는다. 단일 LocalRAG 프로세스 기준이며 다중 인스턴스 잠금을 제공하지 않는다. 현재 전역 자동화는 활성화되어 있어도 프로젝트별 예약 설정은 기본 비활성 상태다.
 
-## Change detection and LLM economy
+## 변경 감지와 모델 호출 절약
 
-The Project fingerprint combines Git HEAD, a sorted hash of working-tree status and diff
-summary, Error History counts plus latest row ID/version/time, and Project Index metadata.
-Decision Log changes are therefore covered through Git or index evidence without a separate
-filesystem scan. All paths still pass exact Project scope.
+프로젝트 지문은 Git HEAD, 정렬한 작업 트리 상태/변경 요약 해시, 오류 이력 건수와 최신 ID/version/시각, 인덱스 메타데이터를 결합한다. Decision Log 변경도 Git/인덱스 근거에 포함되므로 별도 파일 전체 탐색을 하지 않는다. 모든 경로는 프로젝트 범위를 유지한다.
 
-The first run establishes fingerprints. Identical later evidence returns `NO_CHANGE` and
-does not invoke Progress or Activity. When evidence changes, the existing services run
-independently; failure in one does not discard the other's result.
+첫 실행에서 지문을 수집한다. 이후 같으면 NO_CHANGE로 반환하고 Progress/Activity를 호출하지 않는다. 변경 시 두 서비스를 독립 실행하며 하나가 실패해도 다른 결과를 버리지 않는다.
 
-## Error and environment watch
+## 오류·환경 감시
 
-Error Watch reuses the bounded Log Tool and redacts fields. Its fingerprint uses source,
-timestamp, line and normalized message; uniqueness is Project plus fingerprint. A duplicate
-skips persistence and Similar Error Retrieval. A new event invokes Similar Error once and
-stores only reference metadata. It never creates Error History or applies an old solution.
+오류 감시는 제한된 기존 로그 도구와 마스킹을 재사용한다. 지문은 출처·시각·행·정규화 메시지로 만들고 프로젝트와 지문 조합을 고유하게 유지한다. 중복 오류는 저장/유사 오류 검색을 생략한다. 새 오류만 유사 검색 한 번과 참조 메타데이터 저장을 수행한다. Error History를 자동 생성하거나 과거 해결책을 적용하지 않는다.
 
-Environment Watch reuses Docker, Project container, Ollama and Database status services.
-Unavailable components become evidence and notification candidates. Watchers never start
-or stop a component.
+환경 감시는 Docker, 프로젝트 컨테이너, Ollama, DB 상태를 재사용한다. 사용 불가 상태를 근거와 알림 후보로 남길 뿐 서비스를 시작·종료하지 않는다.
 
-## History, notifications, and API
+## 저장과 API
 
-Flyway V6 adds `project_automation_config`, `automation_run`, `detected_error_event`, and
-`notification_candidate`. Run details contain bounded statuses, counts and timings, not
-prompts or raw logs. Candidate types are `ERROR_DETECTED`, `ENVIRONMENT_FAILURE`,
-`PROJECT_CHANGED`, and `PROGRESS_UPDATED`; Project/type/fingerprint uniqueness makes them
-idempotent. Delivery is outside Phase 9.
-
-The API surface is:
+Flyway V6는 `project_automation_config`, `automation_run`, `detected_error_event`, `notification_candidate`를 추가한다. 실행 이력에는 제한된 상태·건수·시간만 저장하며 프롬프트나 원시 로그는 저장하지 않는다. 알림 유형은 ERROR_DETECTED, ENVIRONMENT_FAILURE, PROJECT_CHANGED, PROGRESS_UPDATED이며 프로젝트/유형/지문으로 중복을 막는다. 알림 후보 저장과 외부 알림 전송은 다르며 전송은 구현 범위 밖이다.
 
 - `GET|PUT /api/workspaces/projects/automation`
 - `POST /api/workspaces/projects/automation/run`
 - `GET /api/workspaces/projects/automation/runs`
 - `GET /api/workspaces/projects/automation/notifications`
 
-Manual runs remain available when scheduling is disabled. API requests and query paths
-remain Project scoped.
+예약 비활성 상태에서도 수동 실행이 가능하고 모든 요청/조회는 프로젝트 범위를 따른다.
 
-## Failure semantics
+## 실패와 당시 검증
 
-Statuses are `SUCCESS`, `PARTIAL_SUCCESS`, `NO_CHANGE`, `FAILED`, `DISABLED`, and
-`ALREADY_RUNNING`. Fingerprint collection failure fails the run. Error Watch, Environment
-Watch, Progress and Activity failures are isolated as partial success. Exception details
-are neither returned nor persisted.
+상태는 SUCCESS, PARTIAL_SUCCESS, NO_CHANGE, FAILED, DISABLED, ALREADY_RUNNING이다. 지문 수집 실패는 실행 실패다. 오류·환경 감시와 진행 상태·최근 작업 실패는 부분 성공으로 격리한다. 예외 상세를 반환하거나 저장하지 않는다.
 
-## Performance and validation
+| 자동 테스트 항목 | 당시 측정값 |
+| --- | ---: |
+| 변경 없음, Progress/Activity 호출 0회 | 2 ms |
+| 변경 있음, 가짜 LLM 작업 제외 | 2 ms |
+| 지문 수집 3회 | 80 ms |
+| 새 오류와 중복 오류 감시 | 43 ms |
+| 환경 감시 | 3 ms |
+| 설정·실행·알림 DB 저장 | 69 ms |
 
-Final local automated baselines on this Windows development machine:
+전체 테스트는 169개, 62개 묶음, 실패 0, 선택 실행 실제 모델 테스트 1개 제외, 50초였다. 운영 지연 보장이 아닌 로컬 회귀 기준이다. 과거 실제 qwen 진행 상태 약 18.5초와 최근 작업 약 16.4초의 호출을 생략할 수 있으나 그 합을 모든 실행의 확정 절약 시간으로 주장하지 않는다. 모델/프롬프트 흐름이 같아 실제 평가를 반복하지 않았다.
 
-- no-change branch: 2 ms in the isolated service test, zero Progress/Activity calls;
-- changed branch excluding mocked LLM work: 2 ms;
-- fingerprint fixture: 80 ms for three captures;
-- new plus duplicate Error Watch fixture: 43 ms;
-- Environment Watch fixture: 3 ms;
-- config, run and notification DB saves: 69 ms against Testcontainers PostgreSQL;
-- full suite: 169 tests, zero failures, one opt-in live test skipped, 62 suites in 50 s.
+## 당시 남긴 한계
 
-These are regression guardrails, not production latency claims. Cache, container startup,
-model warm-up and machine load affect them. Phase 8 real qwen baselines remain about 18.5 s
-for Progress and 16.4 s for Activity, so skipping both dominates `NO_CHANGE` savings. No new
-live qwen run was made because Phase 9 changes neither prompt nor model workflow.
-
-## Backlog
-
-- Multi-instance operation needs a database/distributed lease.
-- Notification delivery, acknowledgement, retention and Windows toast belong to a later phase.
-- A future UI may require cron/calendar schedules; interval scheduling is the current baseline.
-- Environment recovery notifications may later be separated from failure notifications.
-- Packaged desktop operation should supply production filesystem and scheduling SLO samples.
+다중 인스턴스 잠금, 알림 전송·확인·보관·Windows 알림, cron/달력 예약, 환경 복구 알림 분리, 패키지 환경의 운영 성능 기준은 구현하지 않았다. 이후 UI가 생겼어도 이 목록 전체가 구현되었다는 뜻은 아니다.

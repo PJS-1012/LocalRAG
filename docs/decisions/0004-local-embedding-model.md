@@ -1,23 +1,29 @@
-# 0004. Local embedding model
+# 0004. 로컬 임베딩 모델
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Problem
+승인됨. 모델 선정 당시 기록이다.
 
-LocalRAG needs one embedding space that works for Korean documents, English text, and source code without sending content to an external API.
+## 문제
 
-## Candidates
+문서를 외부 API에 보내지 않고 한국어·영어·소스 코드를 같은 임베딩 공간에서 검색해야 한다.
 
-- `qwen3-embedding:0.6b`: multilingual and code retrieval support with a relatively small local model.
-- `bge-m3`: established multilingual model with a larger local footprint.
-- `embeddinggemma`: lightweight multilingual model suited to general document retrieval.
+## 후보
 
-## Decision
+- `qwen3-embedding:0.6b`: 비교적 작은 로컬 모델로 다국어·코드 검색을 지원하는 후보.
+- `bge-m3`: 다국어에 널리 쓰이지만 로컬 자원 요구량이 더 큰 후보.
+- `embeddinggemma`: 일반 문서 검색에 적합한 경량 다국어 후보.
 
-Use `qwen3-embedding:0.6b` through Ollama. Keep model pulling explicit and expose only the vector dimension and a short preview from the learning API.
+## 결정
 
-## Consequence
+Ollama의 `qwen3-embedding:0.6b`를 사용한다. 다운로드는 명시적으로 수행하고,
+학습용 API에는 전체 벡터 대신 차원과 짧은 미리보기만 노출한다.
 
-The model produced 1024-dimensional vectors in the local integration test. Changing the embedding model later requires regenerating all stored document and query vectors, and the measured dimension will become part of the pgvector schema decision in Phase 7.
+## 결과와 영향
+
+로컬 통합 확인에서 1024차원 벡터가 생성됐다. 모델을 바꾸면 저장된 문서 벡터를 재생성하고
+이후 질의도 새 모델의 공간에서 임베딩해야 한다. 차원은 벡터 저장 스키마의 제약이 된다.
+초기 기록에서는 저장 설계를 Phase 7로 예상했으나 실제 구현은 Phase 6에서 진행했다
+([0013](0013-project-pgvector-index.md)). 후보별 우열을 입증하는 대규모 비교 실험은 아니다.

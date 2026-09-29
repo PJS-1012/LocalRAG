@@ -1,17 +1,20 @@
-# 0003. Local Ollama chat baseline
+# 0003. 로컬 Ollama 채팅 기준
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Decision
+승인됨. Phase 3 당시 기록이며 이후 기능은 최신 구조 문서를 참고한다.
 
-- Use Spring AI 1.1.x with Spring Boot 3.5.x and Java 17.
-- Connect to the local Ollama API through the Spring AI Ollama starter.
-- Use `qwen3:8b` as the default chat model, while allowing environment-variable overrides.
-- Keep startup-time model pulling disabled. Models are downloaded and verified explicitly before application startup.
-- Expose a stateless `POST /api/chat` endpoint in Phase 3. Retrieval, chat memory, and tools are deferred to later phases.
+## 결정
 
-## Rationale
+- Java 17, Spring Boot 3.5.x, Spring AI 1.1.x를 사용한다.
+- Spring AI Ollama starter로 로컬 Ollama API에 연결한다.
+- 기본 채팅 모델은 `qwen3:8b`이며 환경변수로 변경할 수 있게 한다.
+- 시작 시 모델 자동 다운로드는 끈다. 앱 실행 전에 모델을 명시적으로 설치·검증한다.
+- Phase 3에서는 상태를 보관하지 않는 `POST /api/chat`만 제공한다. 검색·대화 기억·도구는 이후 단계의 범위로 남긴다.
 
-This phase verifies the model boundary independently from RAG. Explicit model installation avoids hidden multi-gigabyte downloads during application startup and makes failures easier to diagnose.
+## 이유
+
+RAG와 분리해 모델 연결부터 확인한다. 앱 시작 중 수 GB 모델이 예고 없이 다운로드되는 일을
+피하고, 설치 문제와 호출 문제를 구분하기 위한 결정이다.

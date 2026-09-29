@@ -1,33 +1,36 @@
-# Decision 0018: Bounded RAG Context assembly
+# 0018. 길이가 제한된 RAG 근거 문맥 구성
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted for Phase 6 Step 5. The 8,000-character limit is a RAG quality-evaluation baseline, not a final value.
+## 상태와 결정
 
-## Decision
+Phase 6 Step 5에서 승인했다. 8,000자는 품질 평가용 기준값이지 최종 최적값이 아니다.
 
-- Configure the complete formatted Context budget with `localrag.rag.context.max-characters`; default to 8,000.
-- Keep one retrieved Chunk as one Source in this baseline. Do not merge adjacent Chunks yet.
-- Re-sort candidates by descending similarity and assign stable citation labels `S1`, `S2`, and so on in inclusion order.
-- Count the Source header, Project, path, line range, delimiters, content, and separators against the budget.
-- Never truncate a Chunk. Skip a candidate that does not fit and continue evaluating later, smaller candidates.
-- Keep similarity and embedding details in Source metadata only; do not put scores in the LLM-facing Context body.
-- Reject the complete assembly if any returned Chunk has a different `projectId` from the searched Project.
-- Treat a successful zero-result search as a successful empty Context.
+- `localrag.rag.context.max-characters`로 전체 formatted context 예산을 설정한다.
+- 당시 청크 하나를 출처 하나로 두고 인접 청크를 합치지 않았다.
+- 유사도 내림차순으로 정렬하고 포함 순서대로 `S1`, `S2` 등의 ID를 붙인다.
+- 헤더·프로젝트·경로·줄·구분자·내용·출처 사이 구분까지 문자 수에 포함한다.
+- 청크는 자르지 않는다. 들어가지 않으면 제외하고 뒤의 더 작은 후보를 계속 확인한다.
+- 유사도·임베딩 정보는 메타데이터에만 두고 LLM 본문에는 점수를 넣지 않는다.
+- 다른 `projectId`의 청크가 하나라도 있으면 구성 전체를 거부한다.
+- 검색이 정상 0건이면 정상 빈 문맥이다.
 
-## Actual verification
+## 당시 실제 확인
 
-The existing 208-Chunk `Local_Ai_Work` index was queried with the default Query instruction, Top-K 5, threshold 0.45, and the 8,000-character Context budget.
+208청크 `Local_Ai_Work`, Query Instruction ON, Top-K 5, threshold .45 기준이다.
 
-| Query | Included | Excluded by budget | Final characters |
+| 질문 | 포함 | 예산 초과 제외 | 최종 문자 수 |
 |---|---:|---:|---:|
-| Project type discovery | 5 | 0 | 7,282 |
-| Sensitive-file exclusion | 3 | 2 | 5,951 |
-| Workspace boundary protection | 5 | 0 | 6,974 |
-| Missing Kafka consumer configuration | 0 | 0 | 0 |
+| 프로젝트 타입 탐지 | 5 | 0 | 7,282 |
+| 민감 파일 제외 | 3 | 2 | 5,951 |
+| 작업공간 경계 보호 | 5 | 0 | 6,974 |
+| 없는 Kafka consumer 설정 | 0 | 0 | 0 |
 
-Every non-empty Context stayed within budget and omitted similarity labels. Kafka remained a successful empty Context.
+모두 예산 내였고 본문에 similarity 표기가 없었다. Kafka는 정상 빈 문맥이었다.
 
-## Consequences and trust boundary
+## 신뢰 경계와 한계
 
-The next RAG Chat step can use `sources` for citations and the formatted `context` for model input without owning retrieval or budget logic. Source content is still untrusted input: delimiters make its boundary visible but do not neutralize prompt injection. The eventual chat prompt must explicitly treat Source text as evidence, never as instructions. Source content can also resemble the delimiters, so stronger escaping or structured message separation should be evaluated with the LLM integration. Greedy whole-Chunk selection can leave unused budget; this is intentional for the baseline and should be judged with answer-quality evaluation before optimization.
+후속 Chat은 `sources`와 `context`를 소비하고 검색/예산 로직을 중복 소유하지 않는다.
+구분자는 경계를 보일 뿐 Prompt Injection을 무력화하지 않는다. 본문은 신뢰하지 않는 근거이며
+지시로 취급하면 안 된다. 본문 자체가 구분자처럼 보일 수도 있다. 청크 단위 순차 선택으로
+남는 예산이 생길 수 있으며 당시에는 품질 평가 전 최적화하지 않았다.

@@ -1,48 +1,42 @@
-# Decision 0013: Project pgvector indexing
+# 0013. 프로젝트 pgvector 인덱싱
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted for Phase 6 Step 3.
+## 상태와 배경
 
-## Context
+Phase 6 Step 3에서 승인했다. 메모리의 결정적 청크·1024차원 임베딩을 프로젝트 단위로
+지속 저장해야 했다. 당시 검색/RAG는 범위 밖이며 공급자·임베딩 일부 실패·차원 불일치 시
+부분 벡터로 이전 인덱스를 교체하지 않는 것이 목표였다.
 
-Phase 6 Step 2 creates deterministic Chunks and 1024-dimensional embeddings in memory. Step 3 needs durable,
-repeatable Project-level storage without introducing vector search or RAG. A provider failure, partial embedding run,
-or dimension mismatch must never replace a previously valid Project index with partial data.
+## 결정
 
-## Decision
+- `document_chunk_embedding` 한 테이블에 본문·원문/모델 메타데이터·`vector(1024)`를 저장한다.
+- SHA-256 `chunk_id`를 PK로, 작업공간 상대 `project_id`를 동기화/삭제 범위로 사용한다. 임의 UUID는 도입하지 않는다.
+- 1024를 DB 제약과 설정값으로 유지하고 전체 결과와 각 벡터를 쓰기 전에 검증한다.
+- 한 트랜잭션에서 upsert → 조건부 `ON CONFLICT`로 동일 행 쓰기 생략 → 현재 집합에 없는 ID 삭제를 수행한다.
+- 임베딩이 부분 성공/실패이면 Repository를 호출하지 않고 저장 중 오류는 전부 rollback한다.
+- Flyway V1의 확장을 재사용하고 HNSW/IVFFlat은 추가하지 않는다. 쓰기도 순차 처리한다.
 
-- Store Chunk content, source metadata, embedding metadata, and `vector(1024)` in one
-  `document_chunk_embedding` table.
-- Use the deterministic SHA-256 `chunk_id` as the primary key. Scope synchronization and stale deletion by the
-  portable Workspace-relative `project_id`; do not expose absolute paths or introduce random UUIDs yet.
-- Keep 1024 as a database schema constraint and an application configuration value. Validate the complete embedding
-  result and every individual vector before starting database writes.
-- Synchronize one Project in one transaction: upsert new or changed Chunk IDs, leave identical rows untouched with a
-  conditional `ON CONFLICT`, then delete IDs no longer produced for that Project.
-- Do not call the repository when embedding is partial or failed. Roll back every write when any storage operation
-  fails.
-- Reuse the vector extension established by Flyway V1. Do not create HNSW or IVFFlat indexes until semantic search is
-  designed and measured.
-- Keep writes sequential for this baseline; batching and parallelism require measured evidence.
+## 당시 검증 — 2026-09-04
 
-## Verification baseline
+`Local_Ai_Work`, PostgreSQL 17/pgvector 0.8.6, Ollama `qwen3-embedding:0.6b` 기준이다.
 
-Measured on 2026-09-04 using `Local_Ai_Work`, PostgreSQL 17 with pgvector 0.8.6, Ollama, and
-`qwen3-embedding:0.6b`:
+| 항목 | 최초 인덱싱 | 동일 내용 재인덱싱 |
+|---|---:|---:|
+| 문서 / 청크 | 112 / 181 | 청크 181 |
+| 쓴 행 / 삭제 / 저장 | 181 / 0 / 181 | 0 / 0 / 181 |
+| 분할 | 277 ms | 107 ms |
+| 임베딩 | 8,762 ms | 6,031 ms |
+| DB 동기화 | 237 ms | 187 ms |
+| 전체 | 9,317 ms | 6,330 ms |
 
-- First index: 112 Documents, 181 Chunks, 181 inserted, 0 deleted, 181 stored.
-- First index timing: Chunking 277 ms, Embedding 8,762 ms, DB synchronization 237 ms, total 9,317 ms.
-- Identical reindex: 181 Chunks, 0 written, 0 deleted, 181 stored.
-- Identical reindex timing: Chunking 107 ms, Embedding 6,031 ms, DB synchronization 187 ms, total 6,330 ms.
-- Stored dimension: 1024; failed Chunks: 0.
+저장 차원 1024, 실패 청크 0이었다. 모델 준비·캐시·DB 상태·부하에 따라 달라지는 개발 기준값이다.
 
-These are development reference values, not performance targets. Ollama warm-up, filesystem cache, database state,
-and machine load can change subsequent measurements.
+## 영향과 현재 해석
 
-## Consequences
+내용 변경은 새 ID를 만들고 같은 트랜잭션에서 오래된 ID를 삭제한다. 동일 행 여부를 알기 전에
+전체 임베딩을 다시 계산하므로 변경분만 처리하는 증분 방식은 아니다.
 
-The Project index is idempotent and preserves the last complete stored state when preprocessing fails. Changed source
-content naturally receives new deterministic IDs, and the same transaction removes its stale IDs. The current design
-still recomputes embeddings before discovering that rows are identical; avoiding that work requires a future indexing
-plan and is intentionally outside this step.
+원래 문서의 “전처리 실패 시 항상 이전 전체 상태 보존” 표현은 범위가 너무 넓었다.
+현재 코드는 **임베딩 실패/차원/저장 오류**를 방어하지만 앞선 읽기·분할 일부 실패를 저장 중단 조건으로
+직접 사용하지 않는다. 부분 수집 이후 stale 삭제 가능성은 코드 분석상 한계이며 별도 재현 결과는 없다.

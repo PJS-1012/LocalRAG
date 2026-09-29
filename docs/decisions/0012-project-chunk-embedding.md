@@ -1,81 +1,66 @@
-# 0012. Project Chunk embedding baseline
+# 0012. 프로젝트 청크 임베딩 기준
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태와 범위
 
-## Context
+승인됨. Phase 6 Step 2는 메모리의 `DocumentChunk`에 기존 `qwen3-embedding:0.6b`를 적용한다.
+벡터 저장·스키마·검색은 다음 단계였다.
 
-Phase 6 Step 2 applies the existing `qwen3-embedding:0.6b` Spring AI `EmbeddingModel` to in-memory
-`DocumentChunk` values. Vector persistence, schema design, and retrieval remain outside this step.
+## 결정
 
-## Decision
+- 기존 `EmbeddingService`와 Spring AI `EmbeddingModel`을 재사용하고 새 Ollama client를 만들지 않는다.
+- Spring AI 1.1.8의 `EmbeddingModel.embed(List<String>)`로 관찰 가능한 프로젝트 일괄 작업을 만든다.
+- 병렬 요청·Virtual Thread 없이 순차 처리한다. 앱의 일괄 호출이 반드시 단일 HTTP 요청이라는 뜻은 아니다.
+- `EmbeddedChunk`는 청크·모델명·도출된 차원·전체 내부 벡터를 연결한다.
+- Preview API에는 전체 벡터가 아닌 앞 8개 값만 노출한다.
+- 임베딩 단계는 비어 있지 않은 결과에서 가장 흔한 차원을 기준으로 삼고 다른 차원은 `DIMENSION_MISMATCH`로 분류한다.
+- 예상하지 않은 빈 청크는 공급자 호출 전에 거부한다. 후속 저장 단계의 1024차원 강제와 구분한다.
 
-- Reuse the existing `EmbeddingService` and `EmbeddingModel`; do not create another Ollama client.
-- Use Spring AI 1.1.8 `EmbeddingModel.embed(List<String>)` for one observable Project batch.
-- Keep processing sequential and do not add Virtual Threads or parallel requests.
-- Keep `EmbeddedChunk` as the relationship between one `DocumentChunk`, model name, derived dimension, and full
-  internal vector.
-- Never expose full vectors through the Preview API; return only the first eight values.
-- Derive the expected dimension from the most frequent non-empty result dimension instead of hardcoding 1024.
-- Mark vectors with a different dimension as `DIMENSION_MISMATCH`.
-- Reject an unexpected empty Chunk before calling the provider.
+## 실패 처리
 
-## Failure model
+연결 실패와 모델 부재는 프로젝트 단위 `PROVIDER_UNAVAILABLE`, `MODEL_UNAVAILABLE`로 반환하고
+청크마다 반복하지 않는다. 시스템 전체 장애로 분류되지 않는 일괄 실패는 단일 청크 순차 요청으로
+전환해 데이터 오류를 격리한다. 실패 ID/이유와 성공 결과를 함께 유지한다.
+반환 벡터 수가 입력과 다르면 잘못된 공급자 응답으로 처리한다.
 
-A connection failure and missing model are Project-level provider failures. They are reported as
-`PROVIDER_UNAVAILABLE` and `MODEL_UNAVAILABLE` and are not retried once per Chunk.
-
-A non-system batch failure falls back to sequential single-Chunk requests so one invalid data item can be isolated.
-Individual failures are retained with Chunk identity and reason while successful Chunk results remain available.
-A returned vector-count mismatch is treated as an invalid provider response.
-
-## Preview API
+## 미리보기 API
 
 ```http
 POST /api/workspaces/projects/chunks/embeddings/preview?projectId=Local_Ai_Work
 ```
 
-The response contains Project/Document/Chunk counts, success and failure counts, model, derived dimensions, separate
-Chunking and Embedding durations, run status, up to eight vector values per successful Chunk, and failure summaries.
+프로젝트/문서/청크 수, 성공/실패 수, 모델·차원, 분할/임베딩 시간, 실행 상태,
+성공 벡터의 앞 8개 값과 실패 요약을 반환한다.
 
-## Actual consistency check
+## 실제 일관성 확인
 
-Using the local `qwen3-embedding:0.6b` model:
+로컬 모델에 같은 내용을 두 번 넣었을 때 모두 1024차원이었지만 비트 단위로 같지는 않았다.
+앞 8개 값의 cosine similarity는 0.9994978, 최대 절대 차이는 0.0021193이었다.
+다른 내용은 다른 미리보기를 반환했다. 전체 벡터의 유사도 측정과 혼동하지 않는다.
+부동소수점/공급자 실행이 엄격히 결정적이지 않으므로 배열 완전 일치보다 허용 오차를 사용한다.
 
-- repeated identical content returned 1024 dimensions both times
-- repeated results were not bit-identical
-- the first-eight-value cosine similarity was 0.9994978
-- the maximum absolute difference in the first eight values was 0.0021193
-- different content returned a different vector preview
+## 당시 Local_Ai_Work 기준값
 
-The repeated output is practically equivalent but floating-point/provider execution is not strictly deterministic.
-Future tests and caching must use a tolerance or similarity measure, not exact array equality.
+| 항목 | 값 |
+|---|---:|
+| 문서 / 청크 | 100 / 155 |
+| 성공 / 실패 청크 | 155 / 0 |
+| 모델 | qwen3-embedding:0.6b |
+| 일관된 차원 | 1024 |
+| 읽기·분할 | 107 ms |
+| 임베딩 일괄 처리 | 7,258 ms |
+| 청크당 평균 | 46.826 ms |
+| 전체 | 7,366 ms |
 
-## Local_Ai_Work baseline
+평균은 일괄 벽시계 시간을 청크 수로 나눈 값이지 개별 요청 지연이 아니다.
+작업 트리·캐시·모델 준비·CPU/GPU 부하·Ollama 버전에 따라 달라진다.
 
-- source Documents: 100
-- generated Chunks: 155
-- successfully embedded Chunks: 155
-- failed Chunks: 0
-- embedding model: `qwen3-embedding:0.6b`
-- derived and consistent dimension: 1024
-- read and Chunking duration: 107 ms
-- Embedding batch duration: 7,258 ms
-- average Embedding wall time per Chunk: 46.826 ms
-- total duration: 7,366 ms
+## 운영 관찰과 영향
 
-The average is batch wall time divided by Chunk count, not the latency of an individual provider request. Counts and
-timings can change with the working tree, filesystem cache, model warm-up state, CPU/GPU load, and Ollama version.
+최종 확인 중 Ollama가 꺼져 있어 110 ms에 `PROVIDER_UNAVAILABLE`, 차원 0, 실패 155개를 반환했고
+청크별 재시도를 하지 않았다. Ollama 재시작 후 동일 요청의 155개 임베딩이 성공했다.
+앱 가용성은 별도 로컬 Ollama 프로세스에 의존한다.
 
-## Operational observation
-
-During final validation Ollama was not running. The Project result returned `PROVIDER_UNAVAILABLE`, dimension 0,
-and 155 failures in 110 ms without retrying every Chunk. After Ollama restarted, the same request completed with all
-155 Chunks embedded. This confirms the Provider failure classification while showing that application availability
-still depends on the independently managed local Ollama process.
-## Consequences
-
-Batching is substantially more practical than issuing one request for every Chunk, while the fallback retains
-individual data-failure isolation. Full vectors remain in memory only. The next persistence step must decide schema,
-transaction boundaries, replacement semantics, and dimension constraints before storing any vector.
+일괄 처리와 개별 실패 전환을 유지하되 당시 전체 벡터는 메모리에만 있었다.
+후속 단계에서 스키마·트랜잭션·교체 의미·차원 제약을 결정하기로 했다.

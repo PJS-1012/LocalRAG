@@ -1,29 +1,37 @@
-# 0006. Safe single text file read
+# 0006. 단일 텍스트 파일 안전 읽기
 
-## Status
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Accepted
+## 상태
 
-## Problem
+승인됨. Phase 5 Step 6 당시 기록이다. 현재 상대 `projectId`와 문서 필드 확장은
+[0010](0010-phase-5-workspace-ingestion-foundation.md)을 참고한다.
 
-Phase 5 Step 6 needs to turn exactly one selected text file into an internal Document without allowing the read operation to bypass the scan boundary, exclusion, sensitivity, file-type, or size policies.
+## 문제
 
-## Decision
+선택한 텍스트 파일 하나를 내부 문서로 만들되 읽기 API가 기존 경계·제외·민감·형식·크기 정책을
+우회하지 않아야 한다.
 
-Accept only a Project name and a Project-relative file path. Resolve the real Project and file paths before reading and reject paths that escape the selected Project, including traversal and symbolic-link escapes.
+## 결정
 
-Reapply the existing scan policy in this order:
+당시 입력은 프로젝트 이름과 프로젝트 기준 상대 파일 경로다. 실제 프로젝트/파일 경로를 확인하고
+상위 경로 이동이나 심볼릭 링크로 선택한 프로젝트 밖으로 나가는 요청을 거부한다.
 
-1. Excluded parent directory
-2. Sensitive filename
-3. Excluded or unsupported file type
-4. Regular-file metadata and configured size limit
-5. Bounded content read
+기존 탐색 정책을 다음 순서로 다시 적용한다.
 
-Decode content as strict UTF-8. Malformed or unmappable input produces `READ_FAILED`; Step 6 does not guess a fallback encoding.
+1. 제외된 상위 디렉터리
+2. 민감 파일명
+3. 제외되거나 지원하지 않는 파일 형식
+4. 일반 파일 메타데이터와 크기 상한
+5. 읽는 도중에도 크기를 제한하는 본문 읽기
 
-The successful `WorkspaceDocument` contains only `projectName`, `fileName`, `filePath`, `extension`, `size`, `modifiedAt`, and `content`. Read status and failure reason live in a separate `DocumentReadResult`, because they describe the operation rather than the document.
+UTF-8을 엄격하게 디코딩한다. 잘못된 바이트는 `READ_FAILED`로 처리하고 다른 인코딩을 추정하지 않는다.
 
-## Consequence
+당시 `WorkspaceDocument` 필드는 `projectName`, `fileName`, `filePath`, `extension`, `size`,
+`modifiedAt`, `content`다. 상태·실패 이유는 문서 내용이 아니라 작업 결과이므로 `DocumentReadResult`에 둔다.
 
-One inaccessible or invalid file produces a result without throwing from the public reader API. The bounded read checks the size again while reading, reducing the risk from a file that grows after its metadata was checked. Project-wide reading, parsing variants, chunking, embedding, and persistence remain out of scope.
+## 결과와 범위
+
+접근 불가·인코딩 오류는 읽기 결과로 반환한다. 메타데이터 확인 뒤 파일이 커지는 경우를 줄이기 위해
+읽는 동안 크기를 재확인한다. 프로젝트 전체 읽기, 형식별 파서, 청크, 임베딩, 저장은 이 단계 범위가 아니다.
+외부 링크 방어가 모든 내부 링크 정책이나 파일 접근 경쟁 조건을 완전히 해결한다는 뜻은 아니다.

@@ -1,88 +1,75 @@
-# LocalRAG Interview Stories
+# LocalRAG 면접용 개발 사례
 
-## A. Unity Library false-positive scan
+실제 코드와 단계별 기록으로 설명할 수 있는 사례다. 수치는 당시 측정이며 최신 설정·한계는 [사실 검증 문서](portfolio-facts-audit.md)와 [시스템 구조](architecture.md)를 따른다.
 
-**문제:** `Toy_Sports_Day`가 UNKNOWN으로 잡혀 Unity `Library` 파일까지 Scan 대상이 됐다.
+## A. Unity Library가 탐색 대상에 포함된 문제
 
-**원인:** 실제 Unity marker는 바로 아래 `toy_sports_day`에 있었지만 탐지는 Workspace direct
-child만 Project로 취급했다.
+**문제:** Toy_Sports_Day를 UNKNOWN으로 분류해 Unity Library까지 탐색했다.
 
-**해결:** UNKNOWN direct child에 한해 depth 1만 확인하고, 부모는 Container, marker가 있는
-자식만 Project root로 분리했다. depth 2 이상 추정은 금지했다.
+**원인:** 실제 Unity 표식은 바로 아래 toy_sports_day에 있었지만 작업공간 직계 폴더만 프로젝트로 보았다.
 
-**검증:** 포함 파일이 8,614개에서 680개로 약 92.1% 감소했고 oversized 후보는 1개에서
-0개가 됐다. `Library`, `Logs`, `Temp`, `UserSettings` 제외도 정상 적용됐다.
+**해결:** UNKNOWN 직계 폴더에 한해 한 단계 아래만 확인하고 부모는 Container, 표식이 있는 자식은 Project 루트로 구분했다. 두 단계 이상 추정 탐색은 하지 않았다.
 
-**배운 점:** 성능 문제처럼 보이는 과도한 Scan은 병렬화보다 경계 모델 오류를 먼저 의심해야 한다.
+**검증:** 포함 파일 8,614→680개(약 92.1% 감소), 대형 파일 1→0개. Library/Logs/Temp/UserSettings 제외가 정상 적용됐다. 이후 파일 추가로 측정값이 달라진 것과 구분한다.
 
-## B. Retrieval threshold 0.50 recall loss
+**배운 점:** 과도한 탐색은 병렬화보다 프로젝트 경계가 잘못됐는지 먼저 확인해야 한다.
 
-**문제:** 0.50 baseline에서 관련 구현이 threshold 아래로 떨어져 검색 결과가 누락됐다.
+## B. 검색 임계값 0.50에서 관련 결과 누락
 
-**원인:** 전역 임계값이 표현 차이가 있는 semantic query의 실제 similarity 분포보다 높았다.
+**문제:** 관련 구현이 임계값 아래로 떨어졌다.
 
-**해결:** 동일한 10개 Query, corpus, Top-K 5를 유지하고 threshold만 0.45로 낮춰 효과를
-분리 측정했다.
+**원인:** 표현이 다른 의미 검색 질문의 실제 점수에 비해 전역 임계값이 높았다.
 
-**검증:** 관련 결과가 복구됐고 존재하지 않는 Kafka query는 계속 0건이었다. 비관련 증가는
-Top-K 범위에서 제한적이었다.
+**해결:** 같은 질문 10개·자료 집합·Top-K 5를 유지하고 임계값만 0.45로 내려 효과를 분리했다.
 
-**배운 점:** 검색 tuning은 여러 변수를 동시에 바꾸지 않고 recall과 false positive를 함께 봐야 한다.
+**검증:** 관련 결과를 복구하면서 존재하지 않는 Kafka 질문은 0건을 유지했다. 비관련 증가도 Top-K 범위에서 제한적이었다.
 
-## C. Migration ranked above implementation
+**배운 점:** 변수를 한 번에 하나씩 바꾸고 관련 결과 회수와 잘못 포함된 결과를 함께 평가해야 한다.
 
-**문제:** Text-to-Vector 질문에서 실제 `EmbeddingService`보다 vector extension migration이
-더 높은 similarity를 받았다.
+## C. 구현보다 마이그레이션이 먼저 검색되는 문제
 
-**원인:** threshold는 관련성 통과 여부만 정하며 source type 또는 구현 의도를 재정렬하지 않는다.
+**문제:** Text→Vector 질문에서 EmbeddingService보다 벡터 확장 마이그레이션의 유사도가 높았다.
 
-**해결:** threshold를 계속 낮추지 않고 ranking 문제로 분리했다. Query Instruction 실험에서도
-구현 rank는 5위에서 4위로 개선됐지만 migration 1위는 유지됨을 기록했다.
+**원인:** 임계값은 통과 여부를 정할 뿐 구현 의도나 출처 유형에 맞춰 순위를 바꾸지 않는다.
 
-**검증:** 동일 corpus A/B 결과와 Source 의미 검토로 score 상승과 품질 개선을 구분했다.
+**대응:** 임계값을 계속 낮추지 않고 순위 문제로 분리했다. 검색 지침 실험에서 구현은 5→4위로 올랐지만 마이그레이션 1위는 유지됐다.
 
-**배운 점:** recall threshold로 ranking 문제까지 해결하려 하면 precision만 악화된다. 향후
-source weighting/reranker 문제다.
+**검증:** 같은 자료의 A/B와 원문 의미 검토로 점수 상승과 품질 향상을 구분했다.
 
-## D. Docker Compose inherited output pipe
+**배운 점:** 회수율을 높이는 임계값만으로 순위 문제를 해결할 수 없다. 당시 가중치/재정렬 검토 항목으로 남겼으며 이를 구현했다고 주장하지 않는다. 이후 통합 채팅의 경로 기반 출처 선택 정책과도 구분한다.
 
-**문제:** Docker CLI timeout 후에도 Agent 평가가 끝나지 않고 `CompletableFuture.join()`에서
-대기했다.
+## D. Docker Compose 자식 프로세스가 출력 연결을 유지한 문제
 
-**원인:** 부모 Docker CLI는 종료됐지만 Compose plugin child가 output pipe를 계속 보유했다.
+**문제:** Docker CLI 시간 초과 후에도 평가가 CompletableFuture.join()에서 멈췄다.
 
-**해결:** timeout이 난 자체 CLI의 descendants를 부모보다 먼저 종료하고 output future wait도
-별도로 제한했다. 컨테이너나 임의 사용자 프로세스는 종료하지 않는다.
+**원인:** 부모는 종료됐지만 Compose 플러그인 자식이 출력 파이프를 계속 보유했다.
 
-**검증:** child가 pipe를 잡은 회귀 fixture에서 bounded return과 owned-child 종료를 확인했다.
+**해결:** 시간 초과된 자체 명령의 자손을 부모보다 먼저 종료하고 출력 대기에도 별도 제한을 적용했다. 컨테이너나 무관한 사용자 프로세스는 종료하지 않는다.
 
-**배운 점:** 외부 프로세스 timeout은 parent 종료만이 아니라 process tree와 stream 수명까지
-경계로 관리해야 한다.
+**검증:** 자식이 파이프를 잡는 회귀 사례에서 제한 내 반환과 소유한 자식 종료를 확인했다.
 
-## E. JSONB dirty checking and optimistic-lock version
+**배운 점:** 외부 명령 시간 제한은 부모뿐 아니라 프로세스 트리와 스트림 수명까지 다뤄야 한다.
 
-**문제:** Error History 저장 응답 이후 transaction commit에서 version이 한 번 더 증가했다.
+## E. JSONB 변경 감지와 낙관적 잠금 버전 불일치
 
-**원인:** mutable JSONB evidence가 Hibernate dirty checking 대상이 되어 추가 update를 만들었다.
+**문제:** 오류 저장 응답 후 트랜잭션 commit에서 version이 한 번 더 증가했다.
 
-**해결:** write-once JSON evidence를 immutable로 지정하고 persistence 결과와 commit 이후
-version을 같은 값으로 검증했다.
+**원인:** 변경 가능한 JSONB 근거가 Hibernate 변경 감지에 걸려 추가 UPDATE가 발생했다.
 
-**검증:** Testcontainers PostgreSQL에서 returned/committed version 일치, stale version 409와
-Verification Audit을 회귀 테스트했다.
+**해결:** 한 번 저장하는 JSON 근거를 불변으로 매핑하고 복사한 목록을 사용했다.
 
-**배운 점:** JSON column의 객체 변경 가능성은 optimistic locking과 API version 계약까지 영향을 준다.
+**검증:** Testcontainers PostgreSQL에서 응답/commit 후 version 일치, 오래된 version의 409, 검증 변경 이력을 회귀 테스트했다.
 
-## F. Automation no-change economy
+**배운 점:** JSON 객체의 변경 가능성도 낙관적 잠금과 API 버전 계약에 영향을 준다.
 
-**문제:** 변화가 없는 Project도 Progress와 Activity LLM 분석을 반복하면 로컬 GPU 시간을 낭비한다.
+## F. 변경이 없으면 모델을 호출하지 않는 자동화
 
-**원인:** schedule 실행과 비싼 분석 실행 사이에 deterministic change gate가 없었다.
+**문제:** 변화 없는 프로젝트에도 진행 상태와 최근 작업 분석을 반복하면 GPU 시간을 낭비한다.
 
-**해결:** Git, Error History와 Index metadata fingerprint를 만들고 동일하면 `NO_CHANGE`로 끝내
-두 model workflow를 호출하지 않게 했다.
+**원인:** 스케줄과 고비용 분석 사이에 코드로 판정하는 변경 확인 단계가 없었다.
 
-**검증:** no-change service baseline은 2 ms, LLM 호출 0회였다. 실제 Progress 약 18.5초와
-Activity 약 16.4초 기준으로 실행당 약 34.9초 작업을 피한다.
+**해결:** Git·오류 이력·인덱스 메타데이터 지문이 같으면 NO_CHANGE로 반환하고 두 모델 흐름을 생략했다.
 
-**배운 점:** 로컬 AI 자동화는 모델 최적화 전에 불필요한 호출 자체를 제거하는 것이 가장 크다.
+**검증:** 격리된 서비스 테스트에서 2 ms, 모델 호출 0회였다. 과거 실제 진행 상태 약 18.5초와 최근 작업 약 16.4초의 합은 약 34.9초지만 서로 다른 측정값의 합이지 매 실행의 보장된 절약 시간은 아니다.
+
+**배운 점:** 모델 자체를 빠르게 만드는 것과 불필요한 호출을 하지 않는 것은 별도 설계이며, 후자는 호출 횟수로 직접 검증할 수 있다.

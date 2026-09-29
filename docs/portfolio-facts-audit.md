@@ -2,7 +2,7 @@
 
 조사 기준: 2026-09-28, Git `f607670` (`chore: finalize localrag release build`). 대상은 현재 저장소의 Backend, Frontend, Tauri, 설정, SQL Migration, 테스트, Git 및 Decision Log다. 완성된 포트폴리오 문구가 아니라 작성자가 선별·검증해서 사용할 원본 자료다.
 
-이번 조사는 읽기 전용 코드 분석과 기존 산출물 대조다. 애플리케이션 수정, 모델 재평가, 테스트 재실행, 커밋, push는 하지 않았다. 이 문서만 새로 작성했다.
+최초 조사는 읽기 전용 코드 분석과 기존 산출물 대조였으며 코드 수정·모델 재평가·테스트 재실행은 하지 않았다. 분석 문서는 이후 d76b2bf로 저장소에 반영됐다. 2026-09-29 문서 정리에서는 설명과 저장소 링크만 보완했으며 기능 코드 기준 f607670은 그대로다.
 
 ## 읽는 기준
 
@@ -66,9 +66,9 @@ docs/decisions/                   0001~0036 설계·평가 기록
 
 Java/Spring Backend + AI/RAG 지원에서는 React 화면 수보다 안전한 수집 경계, 벡터 SQL, 트랜잭션·검증 상태, 관찰 가능한 실패를 중심으로 설명하는 편이 적합하다.
 
-## 2. 실제 RAG Pipeline
+## 2. 실제 RAG 처리 흐름
 
-### 2.1 인덱싱: Workspace 지정은 설정, UI에서는 Project 선택
+### 2.1 인덱싱: 작업공간은 설정으로 지정하고 UI에서 프로젝트 선택
 
 현재 UI에 임의 Workspace 경로 등록 CRUD는 없다. `LOCALRAG_WORKSPACE_ROOT`/`WorkspaceProperties`가 기본 경로를 공급한다. 서비스의 Path 인자와 설정 공급을 분리했지만 Workspace DB Entity는 아직 없다.
 
@@ -132,9 +132,9 @@ projectId + query
 
 이 경로는 문서 RAG와 읽기 전용 도구를 조합한 방식이다. BM25·Hybrid Search·Reranker를 새로 구현한 것이 아니다. 기존 에이전트 상세의 자동 Tool Calling 경로와도 실행 제한 및 검사가 완전히 같지 않다.
 
-## 3. Workspace 인덱싱 구조
+## 3. 작업공간 인덱싱 구조
 
-### 3.1 Project와 Container, 상대 ID
+### 3.1 프로젝트와 묶음 폴더, 상대 ID
 
 Workspace 직계 디렉터리를 먼저 검사한다. 그 자체가 알려진 타입이면 Project로 채택하고 더 내려가지 않는다. UNKNOWN이면 **자식 디렉터리 한 단계만** marker 탐지한다. 알려진 자식 Project가 있으면 부모는 Container, 없으면 부모가 UNKNOWN Project로 남는다. 즉 Workspace 직계 + 그 아래 한 단계이지 무제한 재귀 탐지가 아니다.
 
@@ -218,7 +218,7 @@ Git 여부는 `.git` **디렉터리** 기준이다. `.git` 파일을 쓰는 work
 2. chunk ID에 splitter 설정/버전은 포함되지 않는다. 분할 정책 변경 시 자동 일관성 보장을 가정하면 안 된다.
 3. 문서가 모두 사라져 청크 0개가 된 경우에는 차원 검증 등 별도 경로가 있어, 어떤 빈 프로젝트든 정상적으로 인덱스를 비운다고 일반화하지 않는다.
 
-## 4. Embedding / Vector Search
+## 4. 임베딩과 벡터 검색
 
 | 항목 | 현재 구현 |
 |---|---|
@@ -263,7 +263,7 @@ Metadata Filter는 Project ID가 핵심이다. 파일 타입/생성물 정책은
 
 ## 5. LLM / Ollama 연동
 
-### 호출·Prompt·Context
+### 호출·프롬프트·근거 문맥
 
 Spring Boot가 Spring AI의 Ollama ChatModel/ChatClient를 통해 기본 `http://localhost:11434`의 `qwen3:8b`를 호출한다. 직접 외부 상용 LLM API를 호출하는 기본 경로는 없다. Model pull 전략은 `never`다.
 
@@ -292,9 +292,9 @@ RAG 예산 8,000자는 Source 헤더·경로·줄·내용·구분자를 포함�
 
 Backend 모델/URL은 `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBEDDING_MODEL`, `OLLAMA_BASE_URL`로 바꿀 수 있다. 그러나 Desktop 시작 시 필수 모델 체크와 Settings 표시에는 현재 baseline 모델 이름이 고정된 부분이 있다. UI에서 모델을 고르는 기능은 없다. 벡터 DB는 1024차원 고정이며 모델 변경을 완전 동적 지원한다고 표현하기 어렵다.
 
-## 6. Source / Grounding 처리
+## 6. 출처와 답변 근거 처리
 
-### Source 생성과 UI 연결
+### 출처 생성과 화면 연결
 
 | 항목 | 코드로 확인한 사실 |
 |---|---|
@@ -321,7 +321,7 @@ Source 클릭 시 **현재 파일**을 다시 읽는다. 인덱싱 당시 스냅
 
 어휘 검사는 “Source에 이름이 있다”만 확인할 수 있다. 단순 언급/테스트/문서의 이름이 실제 구현을 보증하지 않으며 자연어 기능 주장, 일반 지식 오류, 단순 이름/약어를 모두 검증하지 못한다. `[S1]`이 유효해도 그 Source가 해당 주장을 뒷받침하지 않을 수 있다. 복잡한 자동 의미 검증기나 LLM judge는 구현하지 않았다.
 
-## 7. Frontend
+## 7. 프런트엔드
 
 React UI는 현재 10개 화면이다. [App.tsx][app]가 라우트 성격의 화면 전환과 Project 선택 상태를 관리하고 API 모듈이 Backend와 연결한다. Web 환경은 fetch, Desktop은 Tauri 로컬 Bridge를 이용한다.
 
@@ -428,7 +428,7 @@ automation_run 1 ── N notification_candidate
 
 `detected_error_event.top_similar_history_id`는 연관 ID 값이지만 SQL FK 선언은 없다. `notification_candidate.automation_run_id`는 실행 이력 삭제 시 NULL이다. Project ID는 문자열 범위 키이며 **Workspace/Project/Document를 각각 Entity로 정규화한 테이블은 없다**. 그러한 ERD를 새로 그려 현재 구현처럼 넣으면 안 된다.
 
-### Backend 관점에서 설명할 가치가 있는 지점
+### 백엔드 관점에서 설명할 가치가 있는 지점
 
 - 벡터와 추적 Metadata를 한 행에 두어 검색 결과에서 원문 위치를 바로 반환한다.
 - ID 기반 upsert + Project 단위 stale 삭제를 트랜잭션으로 묶는다.
@@ -500,7 +500,7 @@ Desktop은 Backend를 `127.0.0.1:18080`으로 실행하고 Bridge 경로·메서
 
 Backend skip은 실모델 Agent 평가의 opt-in 조건이다. 일반 테스트를 실행할 때마다 모델 품질 전체를 검증했다는 뜻은 아니다. “215개의 독립 테스트 메서드”가 아니라 **215개 실행 사례**라고 적는 것이 정확하다.
 
-### 11.2 주요 Backend 테스트 분류
+### 11.2 주요 백엔드 테스트 분류
 
 소스 위치: [src/test/java/com/localai/workspace][tests]. 아래 수는 parameterized 확장을 포함한 사례 수이며 합계 215다.
 
@@ -678,7 +678,7 @@ Frontend는 API 오류/bridge 설정, App/ProjectList, 오류·자동화·RAG·A
 
 ### 확인 가능한 객관적 근거
 
-현재 Git HEAD까지 45개 커밋이며 author 집계는 `PJS-1012`다. 이것은 작성 계정 기록이지 각 코드 줄을 사람이 직접 입력했다는 증거가 아니다. 저장소만으로 AI 기여율·개발자 직접 작성 비율을 수치화할 수 없다.
+기능 코드 조사 기준 f607670까지 45개 커밋이며 author 집계는 `PJS-1012`다. 이것은 작성 계정 기록이지 각 코드 줄을 사람이 직접 입력했다는 증거가 아니다. 저장소만으로 AI 기여율·개발자 직접 작성 비율을 수치화할 수 없다.
 
 이 대화에는 사용자가 Java 17 유지, 단계별 범위, Project 경계, baseline 값, 평가 기준, 승인·push 정책, 개발 종료 범위를 명시한 기록이 있다. 이는 요구사항 정의·검토·승인 참여의 근거다. 반면 모든 상세 구현을 개발자가 직접 설계·코딩·디버깅했다는 결론은 나오지 않는다. AI는 구현·테스트 실행·분석·문서화 작업을 수행한 이력이 있다.
 
@@ -752,7 +752,7 @@ Frontend는 API 오류/bridge 설정, App/ProjectList, 오류·자동화·RAG·A
 
 ## 16. 3~4페이지 포트폴리오 내용 선별
 
-### 권장: 4페이지, Backend 흐름과 검증을 중심으로
+### 권장: 4페이지, 백엔드 흐름과 검증을 중심으로
 
 | 페이지 | 포함할 내용 | 근거 자료 | 제외/축소할 내용 |
 |---|---|---|---|
@@ -827,50 +827,50 @@ System Architecture에는 다음 관계만 우선 표시한다: React/Tauri → 
 
 ## 근거 파일 바로가기
 
-아래 링크는 조사 당시 로컬 저장소 절대 경로다. 저장소를 옮겨 공개할 때에는 링크를 해당 Git commit의 GitHub 경로로 바꾸면 된다. 원본 소스·평가 JSON을 외부에 옮길 때 다른 프로젝트 코드/로그가 섞이지 않도록 별도 확인해야 한다.
+아래 링크는 이 문서 위치를 기준으로 한 저장소 상대 경로다. GitHub와 다른 PC에서도 같은 파일을 열 수 있도록 로컬 절대 경로만 바꿨으며 파일명·디렉터리명은 번역하지 않았다. 고정된 시점으로 코드를 인용할 때에는 조사 기준 f607670을 함께 명시한다. 원본 소스·평가 JSON을 외부에 옮길 때 다른 프로젝트 코드/로그가 섞이지 않도록 별도 확인해야 한다.
 
-[build]: C:/workspace/Local_Ai_Work/build.gradle
-[config]: C:/workspace/Local_Ai_Work/src/main/resources/application.yml
-[package]: C:/workspace/Local_Ai_Work/frontend/package.json
-[cargo]: C:/workspace/Local_Ai_Work/frontend/src-tauri/Cargo.toml
-[java]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace
-[discovery]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/discovery/ProjectDiscoveryService.java
-[detector]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/discovery/ProjectTypeDetector.java
-[projectid]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/discovery/ProjectId.java
-[scanner]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/scan/ProjectFileScanner.java
-[scanpolicy]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/scan/WorkspaceScanPolicy.java
-[reader]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/document/ProjectDocumentReader.java
-[batch]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/document/ProjectDocumentBatchReader.java
-[projectchunk]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/chunk/ProjectChunkingService.java
-[chunk]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/chunk/DocumentChunkingService.java
-[splitter]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/chunk/CharacterChunkSplitter.java
-[embedbatch]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/embedding/ProjectChunkEmbeddingService.java
-[embed]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/embedding/EmbeddingService.java
-[indexservice]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/index/ProjectIndexService.java
-[indexrepo]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/index/ProjectIndexRepository.java
-[searchservice]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/search/ProjectSemanticSearchService.java
-[searchrepo]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/search/ProjectSemanticSearchRepository.java
-[searchprops]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/search/ProjectSearchProperties.java
-[context]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/rag/RagContextAssemblyService.java
-[ragchat]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/rag/RagChatService.java
-[citation]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/rag/RagCitationValidator.java
-[chat]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/chat/ChatService.java
-[unifiedcontroller]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/agent/UnifiedChatController.java
-[agentservice]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/agent/AgentChatService.java
-[toolround]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/chat/UnifiedToolRound.java
-[knowledge]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/agent/ProjectKnowledgeAgentTools.java
-[brief]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/overview/ProjectBriefService.java
-[evidencepolicy]: C:/workspace/Local_Ai_Work/src/main/java/com/localai/workspace/overview/ProjectEvidencePolicy.java
-[app]: C:/workspace/Local_Ai_Work/frontend/src/App.tsx
-[ragpage]: C:/workspace/Local_Ai_Work/frontend/src/pages/RagPage.tsx
-[migrations]: C:/workspace/Local_Ai_Work/src/main/resources/db/migration
-[compose]: C:/workspace/Local_Ai_Work/compose.yml
-[startup]: C:/workspace/Local_Ai_Work/frontend/src-tauri/src/startup.rs
-[tests]: C:/workspace/Local_Ai_Work/src/test/java/com/localai/workspace
-[d9]: C:/workspace/Local_Ai_Work/docs/decisions/0009-depth-one-project-root-discovery.md
-[d10]: C:/workspace/Local_Ai_Work/docs/decisions/0010-phase-5-workspace-ingestion-foundation.md
-[d14]: C:/workspace/Local_Ai_Work/docs/decisions/0014-project-cosine-similarity-search.md
-[d15]: C:/workspace/Local_Ai_Work/docs/decisions/0015-similarity-threshold-045.md
-[d16]: C:/workspace/Local_Ai_Work/docs/decisions/0016-query-instruction-evaluation.md
-[d20]: C:/workspace/Local_Ai_Work/docs/decisions/0020-phase-6-rag-quality-baseline.md
-[d36]: C:/workspace/Local_Ai_Work/docs/decisions/0036-final-quality-guards-and-release.md
+[build]: ../build.gradle
+[config]: ../src/main/resources/application.yml
+[package]: ../frontend/package.json
+[cargo]: ../frontend/src-tauri/Cargo.toml
+[java]: ../src/main/java/com/localai/workspace
+[discovery]: ../src/main/java/com/localai/workspace/discovery/ProjectDiscoveryService.java
+[detector]: ../src/main/java/com/localai/workspace/discovery/ProjectTypeDetector.java
+[projectid]: ../src/main/java/com/localai/workspace/discovery/ProjectId.java
+[scanner]: ../src/main/java/com/localai/workspace/scan/ProjectFileScanner.java
+[scanpolicy]: ../src/main/java/com/localai/workspace/scan/WorkspaceScanPolicy.java
+[reader]: ../src/main/java/com/localai/workspace/document/ProjectDocumentReader.java
+[batch]: ../src/main/java/com/localai/workspace/document/ProjectDocumentBatchReader.java
+[projectchunk]: ../src/main/java/com/localai/workspace/chunk/ProjectChunkingService.java
+[chunk]: ../src/main/java/com/localai/workspace/chunk/DocumentChunkingService.java
+[splitter]: ../src/main/java/com/localai/workspace/chunk/CharacterChunkSplitter.java
+[embedbatch]: ../src/main/java/com/localai/workspace/embedding/ProjectChunkEmbeddingService.java
+[embed]: ../src/main/java/com/localai/workspace/embedding/EmbeddingService.java
+[indexservice]: ../src/main/java/com/localai/workspace/index/ProjectIndexService.java
+[indexrepo]: ../src/main/java/com/localai/workspace/index/ProjectIndexRepository.java
+[searchservice]: ../src/main/java/com/localai/workspace/search/ProjectSemanticSearchService.java
+[searchrepo]: ../src/main/java/com/localai/workspace/search/ProjectSemanticSearchRepository.java
+[searchprops]: ../src/main/java/com/localai/workspace/search/ProjectSearchProperties.java
+[context]: ../src/main/java/com/localai/workspace/rag/RagContextAssemblyService.java
+[ragchat]: ../src/main/java/com/localai/workspace/rag/RagChatService.java
+[citation]: ../src/main/java/com/localai/workspace/rag/RagCitationValidator.java
+[chat]: ../src/main/java/com/localai/workspace/chat/ChatService.java
+[unifiedcontroller]: ../src/main/java/com/localai/workspace/agent/UnifiedChatController.java
+[agentservice]: ../src/main/java/com/localai/workspace/agent/AgentChatService.java
+[toolround]: ../src/main/java/com/localai/workspace/chat/UnifiedToolRound.java
+[knowledge]: ../src/main/java/com/localai/workspace/agent/ProjectKnowledgeAgentTools.java
+[brief]: ../src/main/java/com/localai/workspace/overview/ProjectBriefService.java
+[evidencepolicy]: ../src/main/java/com/localai/workspace/overview/ProjectEvidencePolicy.java
+[app]: ../frontend/src/App.tsx
+[ragpage]: ../frontend/src/pages/RagPage.tsx
+[migrations]: ../src/main/resources/db/migration
+[compose]: ../compose.yml
+[startup]: ../frontend/src-tauri/src/startup.rs
+[tests]: ../src/test/java/com/localai/workspace
+[d9]: ../docs/decisions/0009-depth-one-project-root-discovery.md
+[d10]: ../docs/decisions/0010-phase-5-workspace-ingestion-foundation.md
+[d14]: ../docs/decisions/0014-project-cosine-similarity-search.md
+[d15]: ../docs/decisions/0015-similarity-threshold-045.md
+[d16]: ../docs/decisions/0016-query-instruction-evaluation.md
+[d20]: ../docs/decisions/0020-phase-6-rag-quality-baseline.md
+[d36]: ../docs/decisions/0036-final-quality-guards-and-release.md

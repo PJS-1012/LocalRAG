@@ -1,58 +1,33 @@
-# Decision 0030: Local developer dashboard
+# 결정 0030: 로컬 개발 대시보드
 
-## Decision
+> 이 문서는 해당 단계의 결정과 당시 검증 결과를 보존합니다. 현재 구현은 [시스템 구조](../architecture.md), 최종 검증은 [배포 점검표](../release-checklist.md)를 기준으로 확인하세요.
 
-Phase 10 adds a React 19, TypeScript and Vite web UI over the existing Project-scoped Spring
-Boot APIs. A small overview API composes existing read-only summaries for the dashboard.
-Business rules, Workspace path enforcement, tool execution, RAG, and automation remain in
-the backend. Tauri packaging and a one-click launcher are deferred because the current host
-does not provide the required desktop toolchain and the web baseline is independently useful.
+## 결정과 범위
 
-## UI scope
+Phase 10에서 기존 프로젝트별 Spring Boot API 위에 React 19·TypeScript·Vite UI를 추가했다. 대시보드용 요약 API는 기존 읽기 전용 결과를 조합한다. 업무 규칙, 작업공간 경계, 도구 실행, RAG, 자동화는 백엔드에 유지한다. 당시 데스크톱 도구가 준비되지 않아 Tauri/원클릭 실행은 보류했으며 이후 단계에서 구현했다.
 
-The application covers Dashboard, RAG, Agent, Error History and Similar Error, Progress,
-Recent Activity, Automation and Run History, Notification Candidates, and Settings. Project
-selection uses relative `projectId` values. The UI exposes no absolute-path entry, secret,
-arbitrary command, Git mutation, service start/stop, or source modification control.
+화면은 대시보드, RAG, Agent, 오류 이력/유사 오류, 진행 상태, 최근 작업, 자동화/실행 이력, 알림 후보, 설정을 제공한다. 선택값은 상대 경로 projectId다. 절대 경로·비밀값·임의 명령 입력, Git 변경, 서비스 시작/종료, 코드 수정 제어는 이 단계 UI에 없다.
 
-The frontend uses local React state and dedicated API modules. This is sufficient for the
-current single-user dashboard and avoids introducing a state framework before shared client
-state becomes complex.
+단일 사용자 화면에는 React 로컬 상태와 전용 API 모듈로 충분하다고 판단하여 별도 상태 관리 프레임워크를 도입하지 않았다.
 
-## Overview API
+## 요약 API
 
-The Project overview endpoint reuses discovery, Git, index, Error History, notification, and
-environment status services. Partial integration failure becomes component status instead of
-an endpoint-wide exception. The endpoint never performs indexing or invokes a model.
+프로젝트 탐지, Git, 인덱스, 오류 이력, 알림, 환경 상태 서비스를 재사용한다. 일부 조회 실패는 구성요소 상태로 반환하며 전체 API 예외로 확대하지 않는다. 이 API는 인덱싱과 모델 호출을 하지 않는다.
 
-## Validation
+## 당시 검증
 
-- Frontend: 7 tests in 6 files, all passing.
-- Production build: 49 modules; 272.56 kB JavaScript and 22.10 kB CSS before gzip.
-- Backend: 173 tests, zero failures/errors, one opt-in live test skipped.
-- Live flows: Project selection/overview, RAG, Agent tool selection, Error History, Similar
-  Error, Progress, Automation Run Now, Run History, and Notification Candidate exercised.
-- Vite page and Spring API proxy returned HTTP 200.
+- 프런트엔드: 6개 파일의 테스트 7개 통과.
+- 배포 빌드: 모듈 49개, 압축 전 JavaScript 272.56 kB, CSS 22.10 kB.
+- 백엔드: 173개 테스트, 실패/오류 0, 선택 실행 실제 모델 테스트 1개 제외.
+- 프로젝트 선택/요약, RAG, Agent 도구 선택, 오류 이력, 유사 오류, 진행 상태, 수동 자동화, 실행 이력, 알림 후보를 확인했다.
+- Vite 페이지와 Spring API 프록시는 HTTP 200을 반환했다.
 
-The first Agent Git-status smoke exceeded the bounded evidence limit because unignored
-frontend dependencies flooded working-tree output. A frontend `.gitignore` fixed the cause;
-the composed Git overview then returned `SUCCESS`. No prompt or retrieval tuning was used.
+첫 Git 상태 점검은 추적 제외되지 않은 프런트엔드 의존성 때문에 작업 트리 출력 제한을 초과했다. frontend `.gitignore`로 원인을 수정한 뒤 Git 요약은 SUCCESS였다. 프롬프트나 검색 튜닝으로 우회하지 않았다.
 
-Browser-skill startup was blocked by a workspace refresh helper error. Real API/proxy smoke
-and jsdom interaction tests provided the fallback. Native browser interaction and visual QA
-remain an explicit limitation rather than an implied pass.
+브라우저 도구가 작업공간 새로고침 오류로 초기화되지 않아 실제 API/프록시 점검과 jsdom 상호작용 테스트로 대체했다. 이 단계에서 실제 브라우저 조작/시각 검증까지 통과했다고 주장하지 않는다.
 
-## Portfolio baseline
+## 성과와 당시 남은 작업
 
-The dashboard demonstrates end-to-end productization of the existing ingestion, RAG,
-read-only Agent, Error Intelligence, Progress/Activity, and Automation layers without
-weakening their Project boundary. Detailed timings and bundle metrics are stored in
-`docs/phase10-portfolio-metrics.md`.
+수집·RAG·읽기 전용 Agent·오류 분석·진행 상태·최근 작업·자동화를 프로젝트 경계 안에서 연결했다. 세부 수치는 [Phase 10 측정](../phase10-portfolio-metrics.md)에 있다.
 
-## Backlog
-
-- Tauri/desktop packaging and a one-click local launcher.
-- Native-browser visual and accessibility QA.
-- Deliberate Vitest major upgrade for two moderate development-only advisories.
-- Agent source-output usability improvements that preserve bounded evidence.
-- Production SLO measurements and packaged deployment validation.
+당시 남은 작업은 Tauri/원클릭 실행, 실제 브라우저 시각·접근성 검증, Vitest 개발 의존성 중간 심각도 권고 2건의 주 버전 업그레이드 검토, 제한된 Agent 근거 표시 개선, 운영 성능과 패키지 검증이었다. 이후 완료 여부는 후속 결정과 배포 점검표를 따른다.
